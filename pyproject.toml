@@ -1,0 +1,64 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "content-publisher"
+version = "0.0.1"
+description = "A Python app for publishing content to social media"
+authors = [
+    {name = "Chinomso Ikwuagwu"}
+]
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.9"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+keywords = ["publish content", "automation", "ai", "artificial intelligence"]
+dependencies = [
+    "facebook-sdk",
+    "google-api-python-client",
+    "google-auth-oauthlib",
+    "praw",
+    "requests",
+    "tweepy",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/poshjosh/content-publisher"
+Repository = "https://github.com/poshjosh/content-publisher"
+Documentation = "https://github.com/poshjosh/content-publisher"
+
+#[project.scripts]
+#mcx = "mcx.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.black]
+line-length = 88
+target-version = ['py39']
+
+[tool.isort]
+profile = "black"
+line_length = 88
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
