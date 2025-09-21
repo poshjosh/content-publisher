@@ -200,7 +200,8 @@ class YouTubeHandler(BaseSocialMediaHandler):
                     'categoryId': '22'  # People & Blogs
                 },
                 'status': {
-                    'privacyStatus': 'public'
+                    'privacyStatus': 'public',
+                    'selfDeclaredMadeForKids': False
                 }
             }
 
@@ -270,7 +271,8 @@ class YouTubeHandler(BaseSocialMediaHandler):
     def _get_youtube_credentials_interactively(client_id: str, client_secret: str) -> Dict[str, str]:
         generator = GoogleOAuthTokenGenerator(client_id, client_secret)
 
-        scopes = generator.get_common_scopes(['youtube_upload'])
+        # We need full to upload subtitles
+        scopes = generator.get_common_scopes(['youtube_full'])
         tokens = generator.get_tokens_interactive(scopes, save_tokens=True)
 
         return {
