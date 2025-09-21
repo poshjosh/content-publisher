@@ -16,8 +16,7 @@ class PublisherConfig(ABC):
         raise NotImplementedError
 
     def __str__(self) -> str:
-        masked = [f"{k}=*******" for k in self.credentials.keys()]
-        return f"{self.__class__.__name__}(endpoint={self.endpoint}, credentials={masked})"
+        return f"{self.__class__.__name__}(endpoint={self.endpoint}, credentials={self.credentials.keys()})"
 
 class YouTubePublisherConfig(PublisherConfig):
     @property

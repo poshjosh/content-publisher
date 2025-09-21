@@ -36,14 +36,13 @@ from .google.google_oauth_token_generator import GoogleOAuthTokenGenerator
 
 logger = logging.getLogger(__name__)
 
-class PlatformType(Enum):
+class SocialPlatformType(Enum):
     """Supported social media platforms"""
     YOUTUBE = "youtube"
     FACEBOOK = "facebook"
     META = "meta"  # Alias for Facebook
     INSTAGRAM = "instagram"
     X = "x"
-    TWITTER = "twitter"  # Alias for X
     REDDIT = "reddit"
     TIKTOK = "tiktok"
 
@@ -107,7 +106,7 @@ class PostResult:
                 f"\nsteps_log={self.steps_log}\nerror_details={self.error_details})")
 
 
-class BaseSocialMediaHandler(ABC):
+class SocialContentPublisher(ABC):
     """Abstract base class for social media handlers"""
 
     def __init__(self, api_endpoint: str, credentials: Dict[str, Any]):
@@ -150,7 +149,7 @@ class BaseSocialMediaHandler(ABC):
         result.add_step("Adding subtitles (not implemented in base class)")
         return True
 
-class YouTubeHandler(BaseSocialMediaHandler):
+class YouTubeContentPublisher(SocialContentPublisher):
     """Handler for YouTube API"""
 
     def __init__(self, api_endpoint: str, credentials: Dict[str, Any]):
@@ -280,7 +279,7 @@ class YouTubeHandler(BaseSocialMediaHandler):
             'refresh_token': tokens['refresh_token']
         }
 
-class FacebookHandler(BaseSocialMediaHandler):
+class FacebookContentPublisher(SocialContentPublisher):
     """Handler for Facebook/Meta API"""
 
     def __init__(self, api_endpoint: str, credentials: Dict[str, Any]):
@@ -351,7 +350,7 @@ class FacebookHandler(BaseSocialMediaHandler):
             result.error_details = str(ex)
             return result
 
-class TwitterHandler(BaseSocialMediaHandler):
+class XHandler(SocialContentPublisher):
     """Handler for X (Twitter) API"""
 
     def __init__(self, api_endpoint: str, credentials: Dict[str, Any]):
@@ -422,7 +421,7 @@ class TwitterHandler(BaseSocialMediaHandler):
             result.error_details = str(ex)
             return result
 
-class RedditHandler(BaseSocialMediaHandler):
+class RedditContentPublisher(SocialContentPublisher):
     """Handler for Reddit API"""
 
     def __init__(self, api_endpoint: str, credentials: Dict[str, Any]):
@@ -489,37 +488,16 @@ class RedditHandler(BaseSocialMediaHandler):
             result.error_details = str(ex)
             return result
 
-class InstagramHandler(BaseSocialMediaHandler):
-    """Handler for Instagram API (limited support)"""
-
-    def __init__(self, api_endpoint: str, credentials: Dict[str, Any]):
-        super().__init__(api_endpoint, credentials)
-        self.supports_subtitles = False
-        self.supported_media_types = ['image', 'video']
-
-    def authenticate(self) -> bool:
-        """Instagram API authentication (placeholder)"""
-        # Instagram API is very restricted and typically requires business accounts
-        return False
-
-    def post_content(self, content: ContentObject, result: PostResult) -> PostResult:
-        """Post content to Instagram"""
-        result.message = "Instagram API posting requires business account and special permissions"
-        result.add_step("Instagram posting not implemented - requires business API access")
-        return result
-
 class SocialMediaPoster:
     """Main class for posting content to social media platforms"""
 
     def __init__(self):
         self.handlers = {
-            PlatformType.YOUTUBE.value: YouTubeHandler,
-            PlatformType.FACEBOOK.value: FacebookHandler,
-            PlatformType.META.value: FacebookHandler,
-            PlatformType.INSTAGRAM.value: InstagramHandler,
-            PlatformType.X.value: TwitterHandler,
-            PlatformType.TWITTER.value: TwitterHandler,
-            PlatformType.REDDIT.value: RedditHandler
+            SocialPlatformType.YOUTUBE.value: YouTubeContentPublisher,
+            SocialPlatformType.FACEBOOK.value: FacebookContentPublisher,
+            SocialPlatformType.META.value: FacebookContentPublisher,
+            SocialPlatformType.X.value: XHandler,
+            SocialPlatformType.REDDIT.value: RedditContentPublisher
         }
 
     def post_content(self, request: SocialMediaRequest) -> PostResult:
