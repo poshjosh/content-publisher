@@ -8,6 +8,6 @@ printf "\nActivating virtual environment\n"
 source .venv/bin/activate
 
 printf "\nInstalling module for local development: %s\n" "$(pwd)"
-python3 -m pip install -r src/main /requirements.txt
+python3 -m pip install -r src/main/requirements.txt
 # Make main modules accessible to test modules
 python3 -m pip install -e .
