@@ -10,41 +10,30 @@ Note: TikTok does not have a public API and is not supported.
 """
 
 import os
-import json
 import logging
-import mimetypes
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Dict, List, Any, Optional, Union
+from typing import Dict, List, Any, Optional
 from datetime import datetime
 from enum import Enum
 
-# Third-party imports (would need to be installed)
-try:
-    # YouTube API
-    from googleapiclient.discovery import build
-    from googleapiclient.http import MediaFileUpload
-    from google.oauth2.credentials import Credentials
+# YouTube API
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
+from google.oauth2.credentials import Credentials
 
-    # Facebook/Meta API
-    import facebook
+# Facebook/Meta API
+import facebook
 
-    # Twitter/X API
-    import tweepy
+# Twitter/X API
+import tweepy
 
-    # Reddit API
-    import praw
+# Reddit API
+import praw
 
-    # HTTP requests for general API calls
-    import requests
-except ImportError as e:
-    logging.warning(f"Some API libraries not installed: {e}")
+from .google.google_oauth_token_generator import GoogleOAuthTokenGenerator
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
 logger = logging.getLogger(__name__)
 
 class PlatformType(Enum):
@@ -112,6 +101,12 @@ class PostResult:
         self.steps_log.append(f"{datetime.now().strftime('%H:%M:%S')} - {step}")
         logger.info(step)
 
+    def __str__(self):
+        return (f"{self.__class__.__name__}"
+                f"(success={self.success}\nmessage={self.message}\npost_url={self.post_url}"
+                f"\nsteps_log={self.steps_log}\nerror_details={self.error_details})")
+
+
 class BaseSocialMediaHandler(ABC):
     """Abstract base class for social media handlers"""
 
@@ -137,11 +132,11 @@ class BaseSocialMediaHandler(ABC):
 
         # Check if platform supports the media types
         if content.video_file and 'video' not in self.supported_media_types:
-            result.message = f"Platform does not support video content"
+            result.message = "Platform does not support video content"
             return False
 
         if content.image_file and 'image' not in self.supported_media_types:
-            result.message = f"Platform does not support image content"
+            result.message = "Platform does not support image content"
             return False
 
         result.add_step("Content validation passed")
@@ -160,6 +155,7 @@ class YouTubeHandler(BaseSocialMediaHandler):
 
     def __init__(self, api_endpoint: str, credentials: Dict[str, Any]):
         super().__init__(api_endpoint, credentials)
+        self.__version = api_endpoint.split("/")[-1]
         self.supports_subtitles = True
         self.supported_media_types = ['video']
         self.service = None
@@ -170,13 +166,17 @@ class YouTubeHandler(BaseSocialMediaHandler):
             # Assuming credentials contain OAuth token or service account info
             if 'oauth_token' in self.credentials:
                 creds = Credentials(token=self.credentials['oauth_token'])
-                self.service = build('youtube', 'v3', credentials=creds)
+                self.service = build('youtube', self.__version, credentials=creds)
+            elif 'client_id' in self.credentials and 'client_secret' in self.credentials:
+                creds_dict = self._get_youtube_credentials_interactively(self.credentials['client_id'], self.credentials['client_secret'])
+                creds = Credentials(token=creds_dict['oauth_token'], refresh_token=creds_dict.get('refresh_token'))
+                self.service = build('youtube', self.__version, credentials=creds)
             else:
                 # Alternative: use API key for read-only operations
-                self.service = build('youtube', 'v3', developerKey=self.credentials.get('api_key'))
+                self.service = build('youtube', self.__version, developerKey=self.credentials.get('api_key'))
             return True
-        except Exception as e:
-            logger.error(f"YouTube authentication failed: {e}")
+        except Exception as ex:
+            logger.error(f"YouTube authentication failed: {ex}")
             return False
 
     def post_content(self, content: ContentObject, result: PostResult) -> PostResult:
@@ -235,9 +235,9 @@ class YouTubeHandler(BaseSocialMediaHandler):
             result.message = "Video posted successfully to YouTube"
             return result
 
-        except Exception as e:
-            result.message = f"Failed to post to YouTube: {str(e)}"
-            result.error_details = str(e)
+        except Exception as ex:
+            result.message = f"Failed to post to YouTube: {str(ex)}"
+            result.error_details = str(ex)
             return result
 
     def add_subtitles(self, content: ContentObject, video_id: str, result: PostResult) -> bool:
@@ -262,9 +262,21 @@ class YouTubeHandler(BaseSocialMediaHandler):
                 result.add_step(f"Added subtitles for language: {language}")
 
             return True
-        except Exception as e:
-            result.add_step(f"Failed to add subtitles: {str(e)}")
+        except Exception as ex:
+            result.add_step(f"Failed to add subtitles: {str(ex)}")
             return False
+
+    @staticmethod
+    def _get_youtube_credentials_interactively(client_id: str, client_secret: str) -> Dict[str, str]:
+        generator = GoogleOAuthTokenGenerator(client_id, client_secret)
+
+        scopes = generator.get_common_scopes(['youtube_upload'])
+        tokens = generator.get_tokens_interactive(scopes, save_tokens=True)
+
+        return {
+            'oauth_token': tokens['access_token'],
+            'refresh_token': tokens['refresh_token']
+        }
 
 class FacebookHandler(BaseSocialMediaHandler):
     """Handler for Facebook/Meta API"""
@@ -286,8 +298,8 @@ class FacebookHandler(BaseSocialMediaHandler):
             # Test the connection
             self.graph.get_object('me')
             return True
-        except Exception as e:
-            logger.error(f"Facebook authentication failed: {e}")
+        except Exception as ex:
+            logger.error(f"Facebook authentication failed: {ex}")
             return False
 
     def post_content(self, content: ContentObject, result: PostResult) -> PostResult:
@@ -332,9 +344,9 @@ class FacebookHandler(BaseSocialMediaHandler):
             result.message = "Content posted successfully to Facebook"
             return result
 
-        except Exception as e:
-            result.message = f"Failed to post to Facebook: {str(e)}"
-            result.error_details = str(e)
+        except Exception as ex:
+            result.message = f"Failed to post to Facebook: {str(ex)}"
+            result.error_details = str(ex)
             return result
 
 class TwitterHandler(BaseSocialMediaHandler):
@@ -360,8 +372,8 @@ class TwitterHandler(BaseSocialMediaHandler):
             # Test authentication
             self.api.verify_credentials()
             return True
-        except Exception as e:
-            logger.error(f"Twitter authentication failed: {e}")
+        except Exception as ex:
+            logger.error(f"Twitter authentication failed: {ex}")
             return False
 
     def post_content(self, content: ContentObject, result: PostResult) -> PostResult:
@@ -403,9 +415,9 @@ class TwitterHandler(BaseSocialMediaHandler):
             result.message = "Content posted successfully to Twitter"
             return result
 
-        except Exception as e:
-            result.message = f"Failed to post to Twitter: {str(e)}"
-            result.error_details = str(e)
+        except Exception as ex:
+            result.message = f"Failed to post to Twitter: {str(ex)}"
+            result.error_details = str(ex)
             return result
 
 class RedditHandler(BaseSocialMediaHandler):
@@ -431,8 +443,8 @@ class RedditHandler(BaseSocialMediaHandler):
             # Test authentication
             self.reddit.user.me()
             return True
-        except Exception as e:
-            logger.error(f"Reddit authentication failed: {e}")
+        except Exception as ex:
+            logger.error(f"Reddit authentication failed: {ex}")
             return False
 
     def post_content(self, content: ContentObject, result: PostResult) -> PostResult:
@@ -470,9 +482,9 @@ class RedditHandler(BaseSocialMediaHandler):
             result.message = "Content posted successfully to Reddit"
             return result
 
-        except Exception as e:
-            result.message = f"Failed to post to Reddit: {str(e)}"
-            result.error_details = str(e)
+        except Exception as ex:
+            result.message = f"Failed to post to Reddit: {str(ex)}"
+            result.error_details = str(ex)
             return result
 
 class InstagramHandler(BaseSocialMediaHandler):
@@ -494,24 +506,6 @@ class InstagramHandler(BaseSocialMediaHandler):
         result.add_step("Instagram posting not implemented - requires business API access")
         return result
 
-class TikTokHandler(BaseSocialMediaHandler):
-    """Handler for TikTok (no public API)"""
-
-    def __init__(self, api_endpoint: str, credentials: Dict[str, Any]):
-        super().__init__(api_endpoint, credentials)
-        self.supports_subtitles = False
-        self.supported_media_types = []
-
-    def authenticate(self) -> bool:
-        """TikTok has no public API"""
-        return False
-
-    def post_content(self, content: ContentObject, result: PostResult) -> PostResult:
-        """TikTok posting not available"""
-        result.message = "TikTok does not have a public API for content posting"
-        result.add_step("TikTok API not available - no public API exists")
-        return result
-
 class SocialMediaPoster:
     """Main class for posting content to social media platforms"""
 
@@ -523,12 +517,7 @@ class SocialMediaPoster:
             PlatformType.INSTAGRAM.value: InstagramHandler,
             PlatformType.X.value: TwitterHandler,
             PlatformType.TWITTER.value: TwitterHandler,
-            PlatformType.REDDIT.value: RedditHandler,
-            PlatformType.TIKTOK.value: TikTokHandler
-        }
-
-        self.platforms_without_api = {
-            PlatformType.TIKTOK.value: "TikTok does not have a public API"
+            PlatformType.REDDIT.value: RedditHandler
         }
 
     def post_content(self, request: SocialMediaRequest) -> PostResult:
@@ -546,12 +535,6 @@ class SocialMediaPoster:
 
         try:
             result.add_step(f"Starting content posting process for platform: {platform_name}")
-
-            # Check if platform has an API
-            if platform_name in self.platforms_without_api:
-                result.message = self.platforms_without_api[platform_name]
-                result.add_step(f"Platform {platform_name} does not have a public API")
-                return result
 
             # Get appropriate handler
             if platform_name not in self.handlers:
@@ -573,97 +556,8 @@ class SocialMediaPoster:
 
             return result
 
-        except Exception as e:
-            result.message = f"Unexpected error: {str(e)}"
-            result.error_details = str(e)
-            result.add_step(f"Error occurred: {str(e)}")
+        except Exception as ex:
+            result.message = f"Unexpected error: {str(ex)}"
+            result.error_details = str(ex)
+            result.add_step(f"Error occurred: {str(ex)}")
             return result
-
-def main():
-    """Example usage of the Social Media Poster"""
-
-    # Example content object
-    content = ContentObject(
-        title="Test Video Upload",
-        description="This is a test video uploaded via API",
-        video_file="/path/to/video.mp4",  # Replace with actual path
-        subtitle_files={
-            'en': '/path/to/english.srt',
-            'es': '/path/to/spanish.srt'
-        }
-    )
-
-    # Example YouTube request
-    youtube_request = SocialMediaRequest(
-        platform_name="youtube",
-        api_endpoint="https://www.googleapis.com/youtube/v3",
-        api_credentials={
-            'oauth_token': 'your_oauth_token_here',
-            'api_key': 'your_api_key_here'
-        },
-        content=content
-    )
-
-    # Example Facebook request
-    facebook_request = SocialMediaRequest(
-        platform_name="facebook",
-        api_endpoint="https://graph.facebook.com/v18.0",
-        api_credentials={
-            'access_token': 'your_facebook_access_token',
-            'page_id': 'your_page_id'
-        },
-        content=content
-    )
-
-    # Example Twitter request
-    twitter_request = SocialMediaRequest(
-        platform_name="x",
-        api_endpoint="https://api.twitter.com/2",
-        api_credentials={
-            'consumer_key': 'your_consumer_key',
-            'consumer_secret': 'your_consumer_secret',
-            'access_token': 'your_access_token',
-            'access_token_secret': 'your_access_token_secret'
-        },
-        content=content
-    )
-
-    # Example TikTok request (will fail as expected)
-    tiktok_request = SocialMediaRequest(
-        platform_name="tiktok",
-        api_endpoint="",
-        api_credentials={},
-        content=content
-    )
-
-    # Initialize poster
-    poster = SocialMediaPoster()
-
-    # Test different platforms
-    test_requests = [
-        ("YouTube", youtube_request),
-        ("Facebook", facebook_request),
-        ("Twitter/X", twitter_request),
-        ("TikTok", tiktok_request)
-    ]
-
-    for platform_name, request in test_requests:
-        print(f"\n{'='*50}")
-        print(f"Testing {platform_name}")
-        print('='*50)
-
-        result = poster.post_content(request)
-
-        print(f"Success: {result.success}")
-        print(f"Message: {result.message}")
-        print(f"Post URL: {result.post_url}")
-
-        print("\nExecution Steps:")
-        for step in result.steps_log:
-            print(f"  {step}")
-
-        if result.error_details:
-            print(f"\nError Details: {result.error_details}")
-
-if __name__ == "__main__":
-    main()
