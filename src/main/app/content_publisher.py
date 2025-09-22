@@ -47,6 +47,16 @@ class SocialPlatformType(Enum):
     TIKTOK = "tiktok"
 
 @dataclass
+class SocialPlatformApiConfig:
+    platform_name: str
+    api_endpoint: str
+    api_credentials: Dict[str, Any]
+    
+    def __str__(self) -> str:
+        return (f"{self.__class__.__name__}-{self.platform_name} "
+                f"(endpoint={self.api_endpoint}, credentials={self.api_credentials.keys()})")
+
+@dataclass
 class Content:
     """Content object containing all media and metadata"""
     description: str
@@ -138,18 +148,16 @@ class Content:
         )
 
 @dataclass
-class SocialMediaRequest:
+class PostRequest:
     """Request object containing platform and content information"""
-    platform_name: str
-    api_endpoint: str
-    api_credentials: Dict[str, Any]
+    api_config: SocialPlatformApiConfig
     content: Content
 
     def __post_init__(self):
         """Validate request object"""
-        if not self.platform_name:
+        if not self.api_config.platform_name:
             raise ValueError("Platform name is required")
-        if not self.api_credentials:
+        if not self.api_config.api_credentials:
             raise ValueError("API credentials are required")
 
 @dataclass
@@ -160,22 +168,34 @@ class PostResult:
     steps_log: List[str] = field(default_factory=list)
     platform_response: Optional[Dict[str, Any]] = None
     post_url: Optional[str] = None
-    error_details: Optional[str] = None
 
-    def add_step(self, step: str):
+    def add_step(self, step: str, log_level = logging.INFO) -> 'PostResult':
         """Add a step to the execution log"""
         self.steps_log.append(f"{datetime.now().strftime('%H:%M:%S')} - {step}")
-        logger.info(step)
+        logger.log(log_level, step)
+        return self
+
+    def as_failure(self, message: str) -> 'PostResult':
+        self.success = False
+        self.add_step(message, logging.WARNING)
+        self.message = message
+        return self
+
+    def as_success(self, message: str) -> 'PostResult':
+        self.success = True
+        self.add_step(message, logging.DEBUG)
+        self.message = message
+        return self
 
     def __str__(self):
         steps_lines = '\n'.join(self.steps_log)
         return (f"{self.__class__.__name__}"
                 f"(success={self.success}\nmessage={self.message}\npost_url={self.post_url}"
-                f"\nerror_details={self.error_details}\nsteps_log={steps_lines})")
+                f"\nsteps_log={steps_lines})")
 
 
 class SocialContentPublisher(ABC):
-    """Abstract base class for social media handlers"""
+    """Abstract base class for social media publishers"""
 
     def __init__(self, api_endpoint: str, credentials: Dict[str, Any]):
         self.api_endpoint = api_endpoint
@@ -189,33 +209,29 @@ class SocialContentPublisher(ABC):
         pass
 
     @abstractmethod
-    def post_content(self, content: Content, result: PostResult) -> PostResult:
+    def post_content(self, content: Content, result: Optional[PostResult] = None) -> PostResult:
         """Post content to the platform"""
         pass
 
-    def validate_content(self, content: Content, result: PostResult) -> bool:
+    def validate_content(self, content: Content, result: Optional[PostResult] = None) -> PostResult:
         """Validate content for the specific platform"""
+        if result is None:
+            result = PostResult()
+
         result.add_step("Validating content for platform")
 
         # Check if platform supports the media types
         if content.video_file and 'video' not in self.supported_media_types:
-            result.message = "Platform does not support video content"
-            return False
+            return result.as_failure("Platform does not support video content")
 
         if content.image_file and 'image' not in self.supported_media_types:
-            result.message = "Platform does not support image content"
-            return False
+            return result.as_failure("Platform does not support image content")
 
-        result.add_step("Content validation passed")
-        return True
+        return result.as_success("Content validation passed")
 
-    def add_subtitles(self, content: Content, post_id: str, result: PostResult) -> bool:
+    def add_subtitles(self, content: Content, post_id: str, result: Optional[PostResult] = None) -> PostResult:
         """Add subtitles to posted content if supported"""
-        if not self.supports_subtitles or not content.subtitle_files:
-            return True
-
-        result.add_step("Adding subtitles (not implemented in base class)")
-        return True
+        return result.as_failure("Subtitle addition not implemented")
 
 class YouTubeContentPublisher(SocialContentPublisher):
     """Handler for YouTube API"""
@@ -247,18 +263,18 @@ class YouTubeContentPublisher(SocialContentPublisher):
             logger.error(f"YouTube authentication failed: {ex}")
             return False
 
-    def post_content(self, content: Content, result: PostResult) -> PostResult:
+    def post_content(self, content: Content, result: Optional[PostResult] = None) -> PostResult:
         """Post video content to YouTube"""
+        if result is None:
+            result = PostResult()
         try:
             if not self.authenticate():
-                result.message = "Authentication failed"
-                return result
+                return result.as_failure("Authentication failed")
 
             result.add_step("Authenticated with YouTube API")
 
             if not content.video_file:
-                result.message = "YouTube requires a video file"
-                return result
+                return result.as_failure("YouTube requires a video file")
 
             # Prepare video metadata
             body = {
@@ -298,21 +314,26 @@ class YouTubeContentPublisher(SocialContentPublisher):
 
             # Add subtitles if provided
             if content.subtitle_files:
-                self.add_subtitles(content, video_id, result)
+                self.add_subtitles(content.subtitle_files, video_id, result)
 
-            result.success = True
-            result.message = "Video posted successfully to YouTube"
-            return result
+            if not result.success:
+                return result
+            
+            return result.as_success("Video posted successfully to YouTube")
 
         except Exception as ex:
-            result.message = f"Failed to post to YouTube: {str(ex)}"
-            result.error_details = str(ex)
-            return result
+            return result.as_failure(f"Failed to post to YouTube: {str(ex)}")
 
-    def add_subtitles(self, content: Content, video_id: str, result: PostResult) -> bool:
+    def add_subtitles(self, subtitle_files: Dict[str, str], video_id: str, result: Optional[PostResult] = None) -> PostResult:
         """Add subtitles to YouTube video"""
+        if result is None:
+            result = PostResult()
         try:
-            for language, subtitle_file in content.subtitle_files.items():
+            if not self.supports_subtitles or not subtitle_files:
+                message = "Adding of subtitles is not supported"
+                return result.as_failure(message)
+
+            for language, subtitle_file in subtitle_files.items():
                 media = MediaFileUpload(subtitle_file)
 
                 insert_request = self.service.captions().insert(
@@ -330,10 +351,10 @@ class YouTubeContentPublisher(SocialContentPublisher):
                 insert_request.execute()
                 result.add_step(f"Added subtitles for language: {language}")
 
-            return True
+            return result
         except Exception as ex:
-            result.add_step(f"Failed to add subtitles: {str(ex)}")
-            return False
+            message = f"Failed to add subtitles: {str(ex)}"
+            return result.as_failure(message)
 
     @staticmethod
     def _get_youtube_credentials_interactively(client_id: str, client_secret: str) -> Dict[str, str]:
@@ -372,12 +393,13 @@ class FacebookContentPublisher(SocialContentPublisher):
             logger.error(f"Facebook authentication failed: {ex}")
             return False
 
-    def post_content(self, content: Content, result: PostResult) -> PostResult:
+    def post_content(self, content: Content, result: Optional[PostResult] = None) -> PostResult:
         """Post content to Facebook"""
+        if result is None:
+            result = PostResult()
         try:
             if not self.authenticate():
-                result.message = "Authentication failed"
-                return result
+                return result.as_failure("Authentication failed")
 
             result.add_step("Authenticated with Facebook API")
 
@@ -411,13 +433,10 @@ class FacebookContentPublisher(SocialContentPublisher):
             result.post_url = f"https://www.facebook.com/{post_id}"
             result.platform_response = response
             result.success = True
-            result.message = "Content posted successfully to Facebook"
-            return result
+            return result.as_success("Content posted successfully to Facebook")
 
         except Exception as ex:
-            result.message = f"Failed to post to Facebook: {str(ex)}"
-            result.error_details = str(ex)
-            return result
+            return result.as_failure(f"Failed to post to Facebook: {str(ex)}")
 
 class XHandler(SocialContentPublisher):
     """Handler for X (Twitter) API"""
@@ -446,12 +465,13 @@ class XHandler(SocialContentPublisher):
             logger.error(f"Twitter authentication failed: {ex}")
             return False
 
-    def post_content(self, content: Content, result: PostResult) -> PostResult:
+    def post_content(self, content: Content, result: Optional[PostResult] = None) -> PostResult:
         """Post content to Twitter/X"""
+        if result is None:
+            result = PostResult()
         try:
             if not self.authenticate():
-                result.message = "Authentication failed"
-                return result
+                return result.as_failure("Authentication failed")
 
             result.add_step("Authenticated with Twitter API")
 
@@ -481,14 +501,10 @@ class XHandler(SocialContentPublisher):
             result.add_step(f"Tweet posted successfully - ID: {tweet.id}")
             result.post_url = f"https://twitter.com/user/status/{tweet.id}"
             result.platform_response = tweet._json
-            result.success = True
-            result.message = "Content posted successfully to Twitter"
-            return result
+            return result.as_success("Content posted successfully to Twitter")
 
         except Exception as ex:
-            result.message = f"Failed to post to Twitter: {str(ex)}"
-            result.error_details = str(ex)
-            return result
+            return result.as_failure(f"Failed to post to Twitter: {str(ex)}")
 
 class RedditContentPublisher(SocialContentPublisher):
     """Handler for Reddit API"""
@@ -517,12 +533,13 @@ class RedditContentPublisher(SocialContentPublisher):
             logger.error(f"Reddit authentication failed: {ex}")
             return False
 
-    def post_content(self, content: Content, result: PostResult) -> PostResult:
+    def post_content(self, content: Content, result: Optional[PostResult] = None) -> PostResult:
         """Post content to Reddit"""
+        if result is None:
+            result = PostResult()
         try:
             if not self.authenticate():
-                result.message = "Authentication failed"
-                return result
+                return result.as_failure("Authentication failed")
 
             result.add_step("Authenticated with Reddit API")
 
@@ -548,20 +565,14 @@ class RedditContentPublisher(SocialContentPublisher):
             result.add_step(f"Post submitted successfully - ID: {submission.id}")
             result.post_url = submission.url
             result.platform_response = {'id': submission.id, 'url': submission.url}
-            result.success = True
-            result.message = "Content posted successfully to Reddit"
-            return result
+            return result.as_success("Content posted successfully to Reddit")
 
         except Exception as ex:
-            result.message = f"Failed to post to Reddit: {str(ex)}"
-            result.error_details = str(ex)
-            return result
+            return result.as_failure(f"Failed to post to Reddit: {str(ex)}")
 
-class SocialMediaPoster:
-    """Main class for posting content to social media platforms"""
-
+class SocialContentPublisherFactory:
     def __init__(self):
-        self.handlers = {
+        self.publishers = {
             SocialPlatformType.YOUTUBE.value: YouTubeContentPublisher,
             SocialPlatformType.FACEBOOK.value: FacebookContentPublisher,
             SocialPlatformType.META.value: FacebookContentPublisher,
@@ -569,44 +580,46 @@ class SocialMediaPoster:
             SocialPlatformType.REDDIT.value: RedditContentPublisher
         }
 
-    def post_content(self, request: SocialMediaRequest) -> PostResult:
+    def get_publisher(self, api_config: SocialPlatformApiConfig) -> Optional[SocialContentPublisher]:
+        publisher_class = self.publishers.get(api_config.platform_name)
+        if not publisher_class:
+            return None
+        return publisher_class(api_config.api_endpoint, api_config.api_credentials)
+
+class SocialMediaPoster:
+    """Main class for posting content to social media platforms"""
+
+    def __init__(self, publisher_factory: SocialContentPublisherFactory = SocialContentPublisherFactory()):
+        self.__publisher_factory = publisher_factory
+
+    def post_content(self, request: PostRequest) -> PostResult:
         """
         Main method to post content to specified social media platform
 
         Args:
-            request: SocialMediaRequest object containing platform and content info
+            request: PostRequest object containing platform and content info
 
         Returns:
             PostResult object with success/failure status and detailed logs
         """
         result = PostResult()
-        platform_name = request.platform_name.lower()
 
         try:
-            result.add_step(f"Starting content posting process for platform: {platform_name}")
+            platform = request.api_config.platform_name
+            
+            result.add_step(f"Starting content posting process for platform: {platform}")
 
-            # Get appropriate handler
-            if platform_name not in self.handlers:
-                result.message = f"Unsupported platform: {platform_name}"
-                result.add_step(f"No handler found for platform: {platform_name}")
+            publisher = self.__publisher_factory.get_publisher(request.api_config)
+            if not publisher:
+                return result.as_failure(f"Unsupported platform: {platform}")
+
+            result.add_step(f"Selected publisher: {publisher.__class__.__name__}, for platform: {platform}")
+
+            result = publisher.validate_content(request.content, result)
+            if not result.success:
                 return result
 
-            handler_class = self.handlers[platform_name]
-            handler = handler_class(request.api_endpoint, request.api_credentials)
-
-            result.add_step(f"Selected handler for {platform_name}")
-
-            # Validate content
-            if not handler.validate_content(request.content, result):
-                return result
-
-            # Post content
-            result = handler.post_content(request.content, result)
-
-            return result
+            return publisher.post_content(request.content, result)
 
         except Exception as ex:
-            result.message = f"Unexpected error: {str(ex)}"
-            result.error_details = str(ex)
-            result.add_step(f"Error occurred: {str(ex)}")
-            return result
+            return result.as_failure(f"Unexpected error: {str(ex)}")

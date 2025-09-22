@@ -2,7 +2,8 @@
 import logging
 
 from app.config import Config
-from app.content_publisher import Content, SocialMediaPoster, SocialMediaRequest
+from app.content_publisher import Content, SocialMediaPoster, PostRequest
+from app.content_publisher import SocialPlatformApiConfig
 
 logging.basicConfig(
     level=logging.INFO,
@@ -21,10 +22,12 @@ def publish_content(config: Config, platforms: list[str], content: Content):
         publisher_config = config.get_publisher_config(platform)
         print(f"Publisher config:\n{publisher_config}")
 
-        request = SocialMediaRequest(
-            platform_name=platform,
-            api_endpoint=publisher_config.endpoint,
-            api_credentials=publisher_config.credentials,
+        request = PostRequest(
+            api_config=SocialPlatformApiConfig(
+                platform_name=platform,
+                api_endpoint=publisher_config.endpoint,
+                api_credentials=publisher_config.credentials,
+            ),
             content=content
         )
 
@@ -40,6 +43,5 @@ if __name__ == "__main__":
     # platforms = ["youtube", "facebook", "x", "tiktok"]
     platforms = ["youtube"]
     dir_path = "/Users/chinomso/dev_ai/content-publisher/git-ignore/test-content/signs-and-wonders"
-    dir_path = "/Users/chinomso/dev_ai/content-publisher/git-ignore/test-content/advice"
-    content = Content.of_dir(dir_path, "RAPTURE - Out of reverence for Jesus. #shorts", "portrait")
+    content = Content.of_dir(dir_path, "The days of signs and wonders! #shorts", "landscape")
     publish_content(config, platforms, content)
