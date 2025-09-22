@@ -14,7 +14,7 @@ import logging
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Callable
 from datetime import datetime
 from enum import Enum
 
@@ -81,13 +81,16 @@ class Content:
                     raise FileNotFoundError(f"Subtitle file not found for {lang}: {path}")
 
     @staticmethod
-    def of_dir(dir_path: str, title: str, content_orientation: str = "portrait") -> 'Content':
+    def of_dir(dir_path: str,
+               title: str,
+               content_orientation: str = "portrait",
+               accept_file: Callable[[str], bool] = lambda arg: True) -> 'Content':
         if not dir_path:
             raise ValueError("Directory path is required")
         if not os.path.exists(dir_path) or not os.path.isdir(dir_path):
             raise ValueError(f"Invalid directory path: {dir_path}")
 
-        text_file_names = [e for e in os.listdir(dir_path) if e.endswith(".txt")]
+        text_file_names = [e for e in os.listdir(dir_path) if e.endswith(".txt") and accept_file(e)]
         if not text_file_names:
             raise ValueError(f"No .txt file found in directory: {dir_path}")
 
@@ -95,11 +98,13 @@ class Content:
             text_file_name = text_file_names[0]
         elif 'video-description.txt' in text_file_names:
             text_file_name = "video-description.txt"
-        elif 'description.txt'  in text_file_names:
+        elif 'description.txt' in text_file_names:
             text_file_name = "description.txt"
         elif 'video-content.txt' in text_file_names:
             text_file_name = "video-content.txt"
-        elif 'content.txt'  in text_file_names:
+        elif 'video.txt' in text_file_names:
+            text_file_name = "video.txt"
+        elif 'content.txt' in text_file_names:
             text_file_name = "content.txt"
         else:
             raise ValueError(f"Multiple .txt files found in directory: {dir_path}. Please ensure only one description file is present or name one as 'video-description.txt' or 'description.txt'.")
@@ -122,6 +127,10 @@ class Content:
 
         if not title and len(text_file_names) == 2:
             title = [e for e in text_file_names if e != text_file_name][0]
+
+        if not title:
+            name = os.path.basename(dir_path).replace("-", " ").replace("   ", " - ")
+            title = f"{name[0].upper()}{name[1:]}"
 
         def is_valid_lang_code(code) -> bool:
             return (len(code) == 2 and code.isalpha()) or (len(code) == 5 and code[2] == '-' and code[:2].isalpha() and code[3:].isalpha())
@@ -229,7 +238,7 @@ class SocialContentPublisher(ABC):
 
         return result.as_success("Content validation passed")
 
-    def add_subtitles(self, content: Content, post_id: str, result: Optional[PostResult] = None) -> PostResult:
+    def add_subtitles(self, subtitle_files: Dict[str, str], video_id: str, result: Optional[PostResult] = None) -> PostResult:
         """Add subtitles to posted content if supported"""
         return result.as_failure("Subtitle addition not implemented")
 
