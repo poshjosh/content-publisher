@@ -101,9 +101,10 @@ class PostResult:
         logger.info(step)
 
     def __str__(self):
+        steps_lines = '\n'.join(self.steps_log)
         return (f"{self.__class__.__name__}"
                 f"(success={self.success}\nmessage={self.message}\npost_url={self.post_url}"
-                f"\nsteps_log={self.steps_log}\nerror_details={self.error_details})")
+                f"\nerror_details={self.error_details}\nsteps_log={steps_lines})")
 
 
 class SocialContentPublisher(ABC):
@@ -271,7 +272,7 @@ class YouTubeContentPublisher(SocialContentPublisher):
         generator = GoogleOAuthTokenGenerator(client_id, client_secret)
 
         # We need full to upload subtitles
-        scopes = generator.get_common_scopes(['youtube_full'])
+        scopes = generator.to_scopes(['youtube', 'youtube.force-ssl'])
         tokens = generator.get_tokens_interactive(scopes, save_tokens=True)
 
         return {

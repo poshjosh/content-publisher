@@ -100,20 +100,6 @@ class GoogleOAuthTokenGenerator:
     """
     Google OAuth 2.0 token generator for API access
     """
-
-    # Common Google API scopes
-    COMMON_SCOPES = {
-        'youtube_readonly': 'https://www.googleapis.com/auth/youtube.readonly',
-        'youtube_full': 'https://www.googleapis.com/auth/youtube',
-        'youtube_upload': 'https://www.googleapis.com/auth/youtube.upload',
-        'drive_readonly': 'https://www.googleapis.com/auth/drive.readonly',
-        'drive_full': 'https://www.googleapis.com/auth/drive',
-        'gmail_readonly': 'https://www.googleapis.com/auth/gmail.readonly',
-        'calendar_readonly': 'https://www.googleapis.com/auth/calendar.readonly',
-        'sheets_readonly': 'https://www.googleapis.com/auth/spreadsheets.readonly',
-        'sheets_full': 'https://www.googleapis.com/auth/spreadsheets'
-    }
-
     def __init__(self, client_id: str, client_secret: str, api_key: Optional[str] = None):
         """
         Initialize OAuth token generator
@@ -226,14 +212,14 @@ class GoogleOAuthTokenGenerator:
             flow.redirect_uri = self.redirect_uri
 
             # Generate authorization URL
-            auth_url, state = flow.authorization_url(
+            auth_url, _ = flow.authorization_url(
                 access_type='offline',
                 include_granted_scopes='true',
                 prompt='consent'
             )
 
             logger.info(f"Opening browser for authentication: {auth_url}")
-            print(f"\nOpening browser for Google OAuth authentication...")
+            print("Opening browser for Google OAuth authentication...")
             print(f"If browser doesn't open automatically, visit: {auth_url}")
 
             # Open browser
@@ -398,7 +384,7 @@ class GoogleOAuthTokenGenerator:
         }
 
     @classmethod
-    def get_common_scopes(cls, scope_names: List[str]) -> List[str]:
+    def to_scopes(cls, scope_names: List[str]) -> List[str]:
         """
         Get full scope URLs from common scope names
 
@@ -408,13 +394,14 @@ class GoogleOAuthTokenGenerator:
         Returns:
             List of full scope URLs
         """
+        scope_url = 'https://www.googleapis.com/auth'
         scopes = []
-        for name in scope_names:
-            if name in cls.COMMON_SCOPES:
-                scopes.append(cls.COMMON_SCOPES[name])
+        for scope_name in scope_names:
+            if scope_name.startswith(scope_url):
+                # Already a full scope URL
+                scopes.append(scope_name)
             else:
-                # Assume it's already a full scope URL
-                scopes.append(name)
+                scopes.append(f"{scope_url}/{scope_name}")
         return scopes
 
 def main():
@@ -436,15 +423,10 @@ def main():
     # Initialize generator
     generator = GoogleOAuthTokenGenerator(client_id, client_secret, api_key)
 
-    # Show available scopes
-    print("\nAvailable scope shortcuts:")
-    for name, scope in generator.COMMON_SCOPES.items():
-        print(f"  {name}: {scope}")
-
     # Get desired scopes
     scope_input = input("\nEnter scopes (comma-separated names or full URLs): ")
     scope_names = [s.strip() for s in scope_input.split(',')]
-    scopes = generator.get_common_scopes(scope_names)
+    scopes = generator.to_scopes(scope_names)
 
     print(f"\nRequesting scopes: {scopes}")
 
@@ -471,7 +453,7 @@ def main():
         elif choice == '2':
             # Manual flow
             auth_url = generator.get_authorization_url(scopes)
-            print(f"\nVisit this URL to authorize the application:")
+            print("\nVisit this URL to authorize the application:")
             print(f"{auth_url}")
             print("\nAfter authorization, copy the authorization code and use it with:")
             print("generator.get_tokens_headless(scopes, authorization_code)")
