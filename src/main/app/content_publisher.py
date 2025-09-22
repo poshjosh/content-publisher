@@ -339,7 +339,7 @@ class YouTubeContentPublisher(SocialContentPublisher):
     def _get_youtube_credentials_interactively(client_id: str, client_secret: str) -> Dict[str, str]:
         generator = GoogleOAuthTokenGenerator(client_id, client_secret)
 
-        # We need full to upload subtitles
+        # We need permission 'youtube.force-ssl' to upload subtitles
         scopes = generator.to_scopes(['youtube', 'youtube.force-ssl'])
         tokens = generator.get_tokens_interactive(scopes, save_tokens=True)
 

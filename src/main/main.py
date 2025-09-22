@@ -40,5 +40,6 @@ if __name__ == "__main__":
     # platforms = ["youtube", "facebook", "x", "tiktok"]
     platforms = ["youtube"]
     dir_path = "/Users/chinomso/dev_ai/content-publisher/git-ignore/test-content/signs-and-wonders"
-    content = Content.of_dir(dir_path, "Days of signs and wonders are here! #shorts")
+    dir_path = "/Users/chinomso/dev_ai/content-publisher/git-ignore/test-content/advice"
+    content = Content.of_dir(dir_path, "RAPTURE - Out of reverence for Jesus. #shorts", "portrait")
     publish_content(config, platforms, content)
