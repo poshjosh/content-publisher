@@ -47,13 +47,13 @@ class SocialPlatformType(Enum):
     TIKTOK = "tiktok"
 
 @dataclass
-class ContentObject:
+class Content:
     """Content object containing all media and metadata"""
     description: str
     video_file: Optional[str] = None
     image_file: Optional[str] = None
     title: Optional[str] = None
-    subtitle_files: Optional[Dict[str, str]] = None  # {'en': 'path/to/en.srt', 'es': 'path/to/es.srt'}
+    subtitle_files: Optional[Dict[str, str]] = None  # {'en': 'path/to/en.srt', 'es': 'path/to/es.vtt'}
 
     def __post_init__(self):
         """Validate content object after initialization"""
@@ -70,13 +70,80 @@ class ContentObject:
                 if not os.path.exists(path):
                     raise FileNotFoundError(f"Subtitle file not found for {lang}: {path}")
 
+    @staticmethod
+    def of_dir(dir_path: str, title: str, content_orientation: str = "portrait") -> 'Content':
+        if not dir_path:
+            raise ValueError("Directory path is required")
+        if not os.path.exists(dir_path) or not os.path.isdir(dir_path):
+            raise ValueError(f"Invalid directory path: {dir_path}")
+
+        text_file_names = [e for e in os.listdir(dir_path) if e.endswith(".txt")]
+        if not text_file_names:
+            raise ValueError(f"No .txt file found in directory: {dir_path}")
+
+        if len(text_file_names) == 1:
+            text_file_name = text_file_names[0]
+        elif 'video-description.txt' in text_file_names:
+            text_file_name = "video-description.txt"
+        elif 'description.txt'  in text_file_names:
+            text_file_name = "description.txt"
+        elif 'video-content.txt' in text_file_names:
+            text_file_name = "video-content.txt"
+        elif 'content.txt'  in text_file_names:
+            text_file_name = "content.txt"
+        else:
+            raise ValueError(f"Multiple .txt files found in directory: {dir_path}. Please ensure only one description file is present or name one as 'video-description.txt' or 'description.txt'.")
+
+        with open(os.path.join(dir_path, text_file_name), 'r') as f:
+            description = f.read()
+            logger.debug(f"Description length {len(description)} chars")
+
+        video_file = os.path.join(dir_path,  f"video-{content_orientation}.mp4")
+        if not os.path.exists(video_file):
+            video_file = os.path.join(dir_path, "video.mp4")
+
+        image_file = os.path.join(dir_path, f"cover-{content_orientation}.jpg")
+        if not os.path.exists(image_file):
+            image_file = os.path.join(dir_path, f"cover-{content_orientation}.jpeg")
+            if not os.path.exists(image_file):
+                image_file = os.path.join(dir_path, "cover.jpg")
+                if not os.path.exists(image_file):
+                    image_file = os.path.join(dir_path, "cover.jpeg")
+
+        if not title and len(text_file_names) == 2:
+            title = [e for e in text_file_names if e != text_file_name][0]
+
+        def is_valid_lang_code(code) -> bool:
+            return (len(code) == 2 and code.isalpha()) or (len(code) == 5 and code[2] == '-' and code[:2].isalpha() and code[3:].isalpha())
+
+        subtitles_dir_path = f"{dir_path}/subtitles"
+        logger.debug(f"Checking subtitles directory: {subtitles_dir_path}")
+        subtitle_files = {}
+        if os.path.exists(subtitles_dir_path):
+            for file_name in os.listdir(subtitles_dir_path):
+                if file_name.endswith('.srt') or file_name.endswith('.vtt'):
+                    lang_code = file_name.split('.')[-2]
+                    if not is_valid_lang_code(lang_code):
+                        logger.debug(f"Skipping invalid lang code: {lang_code} for file path: {file_name}")
+                        continue
+                    subtitle_files[lang_code] = os.path.join(subtitles_dir_path, file_name)
+                    logger.debug(f"Found subtitle file for {lang_code}={file_name}")
+
+        return Content(
+            description=description,
+            video_file=video_file if os.path.exists(video_file) else None,
+            image_file=image_file if os.path.exists(image_file) else None,
+            title=title,
+            subtitle_files=subtitle_files
+        )
+
 @dataclass
 class SocialMediaRequest:
     """Request object containing platform and content information"""
     platform_name: str
     api_endpoint: str
     api_credentials: Dict[str, Any]
-    content: ContentObject
+    content: Content
 
     def __post_init__(self):
         """Validate request object"""
@@ -122,11 +189,11 @@ class SocialContentPublisher(ABC):
         pass
 
     @abstractmethod
-    def post_content(self, content: ContentObject, result: PostResult) -> PostResult:
+    def post_content(self, content: Content, result: PostResult) -> PostResult:
         """Post content to the platform"""
         pass
 
-    def validate_content(self, content: ContentObject, result: PostResult) -> bool:
+    def validate_content(self, content: Content, result: PostResult) -> bool:
         """Validate content for the specific platform"""
         result.add_step("Validating content for platform")
 
@@ -142,7 +209,7 @@ class SocialContentPublisher(ABC):
         result.add_step("Content validation passed")
         return True
 
-    def add_subtitles(self, content: ContentObject, post_id: str, result: PostResult) -> bool:
+    def add_subtitles(self, content: Content, post_id: str, result: PostResult) -> bool:
         """Add subtitles to posted content if supported"""
         if not self.supports_subtitles or not content.subtitle_files:
             return True
@@ -157,6 +224,7 @@ class YouTubeContentPublisher(SocialContentPublisher):
         super().__init__(api_endpoint, credentials)
         self.__version = api_endpoint.split("/")[-1]
         self.supports_subtitles = True
+        # TODO Support adding cover image
         self.supported_media_types = ['video']
         self.service = None
 
@@ -179,7 +247,7 @@ class YouTubeContentPublisher(SocialContentPublisher):
             logger.error(f"YouTube authentication failed: {ex}")
             return False
 
-    def post_content(self, content: ContentObject, result: PostResult) -> PostResult:
+    def post_content(self, content: Content, result: PostResult) -> PostResult:
         """Post video content to YouTube"""
         try:
             if not self.authenticate():
@@ -197,7 +265,7 @@ class YouTubeContentPublisher(SocialContentPublisher):
                 'snippet': {
                     'title': content.title or 'Untitled Video',
                     'description': content.description,
-                    'categoryId': '22'  # People & Blogs
+                    'categoryId': 22 # People & Blogs
                 },
                 'status': {
                     'privacyStatus': 'public',
@@ -241,7 +309,7 @@ class YouTubeContentPublisher(SocialContentPublisher):
             result.error_details = str(ex)
             return result
 
-    def add_subtitles(self, content: ContentObject, video_id: str, result: PostResult) -> bool:
+    def add_subtitles(self, content: Content, video_id: str, result: PostResult) -> bool:
         """Add subtitles to YouTube video"""
         try:
             for language, subtitle_file in content.subtitle_files.items():
@@ -304,7 +372,7 @@ class FacebookContentPublisher(SocialContentPublisher):
             logger.error(f"Facebook authentication failed: {ex}")
             return False
 
-    def post_content(self, content: ContentObject, result: PostResult) -> PostResult:
+    def post_content(self, content: Content, result: PostResult) -> PostResult:
         """Post content to Facebook"""
         try:
             if not self.authenticate():
@@ -378,7 +446,7 @@ class XHandler(SocialContentPublisher):
             logger.error(f"Twitter authentication failed: {ex}")
             return False
 
-    def post_content(self, content: ContentObject, result: PostResult) -> PostResult:
+    def post_content(self, content: Content, result: PostResult) -> PostResult:
         """Post content to Twitter/X"""
         try:
             if not self.authenticate():
@@ -449,7 +517,7 @@ class RedditContentPublisher(SocialContentPublisher):
             logger.error(f"Reddit authentication failed: {ex}")
             return False
 
-    def post_content(self, content: ContentObject, result: PostResult) -> PostResult:
+    def post_content(self, content: Content, result: PostResult) -> PostResult:
         """Post content to Reddit"""
         try:
             if not self.authenticate():
