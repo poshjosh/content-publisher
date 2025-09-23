@@ -175,7 +175,7 @@ class GoogleOAuthTokenGenerator:
             Dictionary containing access_token, refresh_token, and other token info
         """
         try:
-            logger.info("Starting interactive OAuth flow")
+            logger.debug("Starting interactive OAuth flow")
 
             # Check for existing valid tokens
             if save_tokens and os.path.exists(token_file):
@@ -184,10 +184,10 @@ class GoogleOAuthTokenGenerator:
                         creds = pickle.load(token)
 
                     if creds and creds.valid and set(creds.scopes) >= set(scopes):
-                        logger.info("Using existing valid tokens")
+                        logger.debug("Using existing valid tokens")
                         return self._credentials_to_dict(creds)
                     elif creds and creds.expired and creds.refresh_token:
-                        logger.info("Refreshing expired tokens")
+                        logger.debug("Refreshing expired tokens")
                         creds.refresh(Request())
 
                         if save_tokens:
@@ -218,7 +218,7 @@ class GoogleOAuthTokenGenerator:
                 prompt='consent'
             )
 
-            logger.info(f"Opening browser for authentication: {auth_url}")
+            logger.debug(f"Opening browser for authentication: {auth_url}")
             print("Opening browser for Google OAuth authentication...")
             print(f"If browser doesn't open automatically, visit: {auth_url}")
 
@@ -226,7 +226,7 @@ class GoogleOAuthTokenGenerator:
             webbrowser.open(auth_url)
 
             # Wait for callback
-            logger.info("Waiting for OAuth callback...")
+            logger.debug("Waiting for OAuth callback...")
             self.oauth_server.handle_request()
 
             # Check for authorization code
@@ -237,7 +237,7 @@ class GoogleOAuthTokenGenerator:
                 raise RuntimeError("No authorization code received")
 
             # Exchange code for tokens
-            logger.info("Exchanging authorization code for tokens")
+            logger.debug("Exchanging authorization code for tokens")
             flow.fetch_token(code=self.oauth_server.auth_code)
 
             credentials = flow.credentials
@@ -246,9 +246,9 @@ class GoogleOAuthTokenGenerator:
             if save_tokens:
                 with open(token_file, 'wb') as token:
                     pickle.dump(credentials, token)
-                logger.info(f"Tokens saved to {token_file}")
+                logger.debug(f"Tokens saved to {token_file}")
 
-            logger.info("OAuth flow completed successfully")
+            logger.debug("OAuth flow completed successfully")
             return self._credentials_to_dict(credentials)
 
         except Exception as e:
@@ -270,7 +270,7 @@ class GoogleOAuthTokenGenerator:
             Dictionary containing tokens
         """
         try:
-            logger.info("Starting headless OAuth token exchange")
+            logger.debug("Starting headless OAuth token exchange")
 
             client_config = self._create_client_config()
             flow = Flow.from_client_config(
@@ -283,7 +283,7 @@ class GoogleOAuthTokenGenerator:
             flow.fetch_token(code=authorization_code)
             credentials = flow.credentials
 
-            logger.info("Token exchange completed successfully")
+            logger.debug("Token exchange completed successfully")
             return self._credentials_to_dict(credentials)
 
         except Exception as e:
@@ -301,7 +301,7 @@ class GoogleOAuthTokenGenerator:
             Dictionary containing new tokens
         """
         try:
-            logger.info("Refreshing OAuth tokens")
+            logger.debug("Refreshing OAuth tokens")
 
             credentials = Credentials(
                 token=None,
@@ -313,7 +313,7 @@ class GoogleOAuthTokenGenerator:
 
             credentials.refresh(Request())
 
-            logger.info("Token refresh completed successfully")
+            logger.debug("Token refresh completed successfully")
             return self._credentials_to_dict(credentials)
 
         except Exception as e:
