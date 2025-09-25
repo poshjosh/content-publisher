@@ -351,7 +351,8 @@ class YouTubeContentPublisher(SocialContentPublisher):
                         'snippet': {
                             'videoId': video_id,
                             'language': language,
-                            'name': f'Subtitles ({language})'
+                            'name': f'Subtitles ({language})',
+                            'isDraft': False
                         }
                     },
                     media_body=media
