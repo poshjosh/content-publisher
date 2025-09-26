@@ -46,6 +46,11 @@ class SocialPlatformType(Enum):
     REDDIT = "reddit"
     TIKTOK = "tiktok"
 
+class PostType(Enum):
+    VIDEO = "video"
+    IMAGE = "image"
+    TEXT = "text"
+
 @dataclass
 class SocialPlatformApiConfig:
     platform_name: str
@@ -202,7 +207,6 @@ class PostResult:
                 f"(success={self.success}\nmessage={self.message}\npost_url={self.post_url}"
                 f"\nsteps_log={steps_lines})")
 
-
 class SocialContentPublisher(ABC):
     """Abstract base class for social media publishers"""
 
@@ -210,7 +214,7 @@ class SocialContentPublisher(ABC):
         self.api_endpoint = api_endpoint
         self.credentials = credentials
         self.supports_subtitles = False
-        self.supported_media_types = []
+        self.supported_post_types = List[PostType]
 
     @abstractmethod
     def authenticate(self) -> bool:
@@ -230,10 +234,10 @@ class SocialContentPublisher(ABC):
         result.add_step("Validating content for platform")
 
         # Check if platform supports the media types
-        if content.video_file and 'video' not in self.supported_media_types:
+        if content.video_file and PostType.VIDEO not in self.supported_post_types:
             return result.as_failure("Platform does not support video content")
 
-        if content.image_file and 'image' not in self.supported_media_types:
+        if content.image_file and PostType.IMAGE not in self.supported_post_types:
             return result.as_failure("Platform does not support image content")
 
         return result.as_success("Content validation passed")
@@ -249,8 +253,7 @@ class YouTubeContentPublisher(SocialContentPublisher):
         super().__init__(api_endpoint, credentials)
         self.__version = api_endpoint.split("/")[-1]
         self.supports_subtitles = True
-        # TODO Support adding cover image
-        self.supported_media_types = ['video']
+        self.supported_post_types = [PostType.VIDEO, PostType.IMAGE]
         self.service = None
 
     def authenticate(self) -> bool:
@@ -321,6 +324,9 @@ class YouTubeContentPublisher(SocialContentPublisher):
             result.post_url = f"https://www.youtube.com/watch?v={video_id}"
             result.platform_response = response
 
+            if content.image_file:
+                self.add_thumbnail(content.image_file, video_id, result)
+
             # Add subtitles if provided
             if content.subtitle_files:
                 self.add_subtitles(content.subtitle_files, video_id, result)
@@ -333,6 +339,30 @@ class YouTubeContentPublisher(SocialContentPublisher):
         except Exception as ex:
             return result.as_failure(f"Failed to post to YouTube: {str(ex)}")
 
+    def add_thumbnail(self, image_file: str, video_id: str, result: Optional[PostResult] = None) -> PostResult:
+        """Add thumbnail to YouTube video"""
+        if result is None:
+            result = PostResult()
+        try:
+            if image_file and PostType.IMAGE not in self.supported_post_types:
+                return result.as_failure("Platform does not support image content")
+
+            media = MediaFileUpload(image_file, chunksize=-1)
+
+            set_request = self.service.thumbnails().set(
+                videoId=video_id,
+                media_body=media
+            )
+
+            set_request.execute()
+
+            result.add_step(f"For video having ID: {video_id}, added thumbnail: {os.path.basename(image_file)}")
+
+            return result
+        except Exception as ex:
+            message = f"Failed to add thumbnail: {str(ex)}"
+            return result.as_failure(message)
+
     def add_subtitles(self, subtitle_files: Dict[str, str], video_id: str, result: Optional[PostResult] = None) -> PostResult:
         """Add subtitles to YouTube video"""
         if result is None:
@@ -343,7 +373,7 @@ class YouTubeContentPublisher(SocialContentPublisher):
                 return result.as_failure(message)
 
             for language, subtitle_file in subtitle_files.items():
-                media = MediaFileUpload(subtitle_file)
+                media = MediaFileUpload(subtitle_file, chunksize=-1)
 
                 insert_request = self.service.captions().insert(
                     part='snippet',
@@ -385,7 +415,7 @@ class FacebookContentPublisher(SocialContentPublisher):
     def __init__(self, api_endpoint: str, credentials: Dict[str, Any]):
         super().__init__(api_endpoint, credentials)
         self.supports_subtitles = False
-        self.supported_media_types = ['video', 'image', 'text']
+        self.supported_post_types = [PostType.VIDEO, PostType.IMAGE, PostType.TEXT]
         self.graph = None
 
     def authenticate(self) -> bool:
@@ -454,7 +484,7 @@ class XHandler(SocialContentPublisher):
     def __init__(self, api_endpoint: str, credentials: Dict[str, Any]):
         super().__init__(api_endpoint, credentials)
         self.supports_subtitles = False
-        self.supported_media_types = ['image', 'text', 'video']
+        self.supported_post_types = [PostType.VIDEO, PostType.IMAGE, PostType.TEXT]
         self.api = None
 
     def authenticate(self) -> bool:
@@ -522,7 +552,7 @@ class RedditContentPublisher(SocialContentPublisher):
     def __init__(self, api_endpoint: str, credentials: Dict[str, Any]):
         super().__init__(api_endpoint, credentials)
         self.supports_subtitles = False
-        self.supported_media_types = ['image', 'text', 'video']
+        self.supported_post_types = [PostType.VIDEO, PostType.IMAGE, PostType.TEXT]
         self.reddit = None
 
     def authenticate(self) -> bool:
