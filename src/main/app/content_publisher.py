@@ -480,7 +480,7 @@ class FacebookContentPublisher(SocialContentPublisher):
         except Exception as ex:
             return result.as_failure(f"Failed to post to Facebook: {str(ex)}")
 
-class XHandler(SocialContentPublisher):
+class XContentPublisher(SocialContentPublisher):
     """Handler for X (Twitter) API"""
 
     def __init__(self, api_endpoint: str, credentials: Dict[str, Any]):
@@ -618,8 +618,8 @@ class SocialContentPublisherFactory:
             SocialPlatformType.YOUTUBE.value: YouTubeContentPublisher,
             SocialPlatformType.FACEBOOK.value: FacebookContentPublisher,
             SocialPlatformType.META.value: FacebookContentPublisher,
-            SocialPlatformType.X.value: XHandler,
-            SocialPlatformType.TWITTER.value: XHandler,
+            SocialPlatformType.X.value: XContentPublisher,
+            SocialPlatformType.TWITTER.value: XContentPublisher,
             SocialPlatformType.REDDIT.value: RedditContentPublisher
         }
 

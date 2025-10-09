@@ -8,8 +8,6 @@ from app.run_arg import RunArg
 
 if __name__ == "__main__":
     run_args = RunArg.get()
-    print(run_args)
-
     logging.basicConfig(
         level=logging.DEBUG if run_args.get(RunArg.VERBOSE) is True else logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'

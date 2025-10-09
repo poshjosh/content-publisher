@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "content-publisher"
-version = "0.0.1"
+version = "0.0.2"
 description = "A Python app for publishing content to social media"
 authors = [
     {name = "Chinomso Ikwuagwu"}
@@ -48,6 +48,8 @@ Documentation = "https://github.com/poshjosh/content-publisher"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+include = ["main", "main*"]  # package names should match these glob patterns (["*"] by default)
+exclude = ["test", "test*"]  # exclude packages matching these glob patterns (empty by default)
 
 [tool.black]
 line-length = 88
