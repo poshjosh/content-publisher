@@ -5,8 +5,11 @@ Social Media Content Posting System
 A comprehensive system for posting content to multiple social media platforms
 with support for videos, images, text, and subtitles where supported.
 
-Supported platforms: YouTube, Facebook/Meta, Instagram, X (Twitter), Reddit
-Note: TikTok does not have a public API and is not supported.
+Supported platforms: YouTube, Facebook (Meta), X (Twitter), Reddit
+Note:
+    TikTok does not have a public API and is not supported.
+    Instagram API is limited
+
 """
 
 import os
@@ -40,11 +43,10 @@ class SocialPlatformType(Enum):
     """Supported social media platforms"""
     YOUTUBE = "youtube"
     FACEBOOK = "facebook"
-    META = "meta"  # Alias for Facebook
-    INSTAGRAM = "instagram"
+    META = "meta"  # Alias for facebook
     X = "x"
     REDDIT = "reddit"
-    TIKTOK = "tiktok"
+    TWITTER = "twitter" # Alias for x
 
 class PostType(Enum):
     VIDEO = "video"
@@ -617,6 +619,7 @@ class SocialContentPublisherFactory:
             SocialPlatformType.FACEBOOK.value: FacebookContentPublisher,
             SocialPlatformType.META.value: FacebookContentPublisher,
             SocialPlatformType.X.value: XHandler,
+            SocialPlatformType.TWITTER.value: XHandler,
             SocialPlatformType.REDDIT.value: RedditContentPublisher
         }
 

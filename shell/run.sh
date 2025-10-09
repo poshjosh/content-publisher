@@ -8,4 +8,6 @@ cd "$WORKING_DIR" || (printf "\nCould not change to working dir: %s\n" "$WORKING
 
 printf "\nWorking from: %s\n" "$(pwd)"
 
-python3 main.py
+python3 main.py -p youtube -o portrait \
+                  -d /Users/chinomso/Desktop/live-above-3D/aideas-docker-mount/input \
+                  -t "Who let the dogs out #shorts"
