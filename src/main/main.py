@@ -2,25 +2,19 @@
 import logging
 
 from app.config import Config
-from app.content_publisher import Content, SocialMediaPoster, PostRequest
+from app.content_publisher import Content, SocialMediaPoster, PostRequest, PostResult
 from app.content_publisher import SocialPlatformApiConfig
+from app.run_arg import RunArg
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-
-
-def publish_content(config: Config, platforms: list[str], content: Content):
+def publish_content(config: Config, platforms: list[str], content: Content) -> dict[str, PostResult]:
 
     poster = SocialMediaPoster()
 
+    result = {}
+
     for platform in platforms:
-        print(f"\nTesting {platform}")
 
         publisher_config = config.get_publisher_config(platform)
-        print(f"Publisher config:\n{publisher_config}")
 
         request = PostRequest(
             api_config=SocialPlatformApiConfig(
@@ -31,17 +25,23 @@ def publish_content(config: Config, platforms: list[str], content: Content):
             content=content
         )
 
-        result = poster.post_content(request)
+        result[platform] = poster.post_content(request)
 
-        print("========= RESULT ==========")
-        print(result)
-        print("===========================")
+    return result
 
 
 if __name__ == "__main__":
-    config = Config()
-    # platforms = ["youtube", "facebook", "x", "tiktok"]
-    platforms = ["youtube"]
-    dir_path = "/Users/chinomso/dev_ai/content-publisher/git-ignore/test-content/signs-and-wonders"
-    content = Content.of_dir(dir_path, "The days of signs and wonders! #shorts", "landscape")
-    publish_content(config, platforms, content)
+    run_args = RunArg.get()
+
+    logging.basicConfig(
+        level=logging.DEBUG if run_args.get(RunArg.VERBOSE) is True else logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+
+    platforms = run_args.get(RunArg.PLATFORMS)
+    dir_path = run_args.get(RunArg.DIR)
+    text_title = run_args.get(RunArg.TEXT_TITLE)
+    media_orientation = run_args.get(RunArg.MEDIA_ORIENTATION)
+
+    content = Content.of_dir(dir_path, text_title, media_orientation)
+    publish_content(Config(), platforms, content)

@@ -1,3 +1,6 @@
+# Remove this once you are done using it
+publish_landscape_of_existing*
+
 # Custom to this application
 google_oauth_tokens.pickle
 
