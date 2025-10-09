@@ -19,7 +19,7 @@ python3 -m pip install --upgrade pip
 
 python3 -m pip install pip-tools
 
-cd "src/main"
+cd "src/content_publisher"
 
 printf "\nCompiling dependencies to requirements.txt\n"
 pip-compile requirements.in > requirements.txt

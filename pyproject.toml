@@ -44,11 +44,10 @@ Repository = "https://github.com/poshjosh/content-publisher"
 Documentation = "https://github.com/poshjosh/content-publisher"
 
 #[project.scripts]
-#mcx = "mcx.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["main", "main*"]  # package names should match these glob patterns (["*"] by default)
+include = ["content_publisher", "content_publisher*"]  # package names should match these glob patterns (["*"] by default)
 exclude = ["test", "test*"]  # exclude packages matching these glob patterns (empty by default)
 
 [tool.black]

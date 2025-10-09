@@ -2,7 +2,7 @@
 
 source ./pre_run.sh
 
-WORKING_DIR="src/main" # The app expect to work from within the main directory.
+WORKING_DIR="src/content_publisher" # The app expect to work from within the main directory.
 
 cd "$WORKING_DIR" || (printf "\nCould not change to working dir: %s\n" "$WORKING_DIR" && exit 1)
 

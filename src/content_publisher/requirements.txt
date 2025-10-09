@@ -4,19 +4,19 @@
 #
 #    pip-compile --cert=None --client-cert=None --index-url=None --pip-args=None requirements.in
 #
-cachetools==5.5.2
+cachetools==6.2.0
     # via google-auth
-certifi==2025.8.3
+certifi==2025.10.5
     # via requests
 charset-normalizer==3.4.3
     # via requests
 facebook-sdk==3.1.0
     # via -r requirements.in
-google-api-core==2.25.1
+google-api-core==2.26.0
     # via google-api-python-client
-google-api-python-client==2.182.0
+google-api-python-client==2.184.0
     # via -r requirements.in
-google-auth==2.40.3
+google-auth==2.41.1
     # via
     #   -r requirements.in
     #   google-api-core
@@ -83,5 +83,5 @@ uritemplate==4.2.0
     # via google-api-python-client
 urllib3==2.5.0
     # via requests
-websocket-client==1.8.0
+websocket-client==1.9.0
     # via praw
