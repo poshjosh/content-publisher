@@ -2,7 +2,7 @@
 A Python app for publishing content to social media
 """
 
-__version__ = "0.2.0"
+__version__ = "v0.0.3"
 __author__ = "https://github.com/poshjosh"
 
 from .app.app import App
