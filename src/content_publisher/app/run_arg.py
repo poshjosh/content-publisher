@@ -43,7 +43,18 @@ class RunArg(str, Enum):
     VERBOSE = ('verbose', 'v', 'bool', True, False, False)
 
     @staticmethod
-    def get(target: dict[str, any] = None, source: list[str] = sys.argv) -> dict[str, any]:
+    def of(key: str) -> 'RunArg':
+        for run_arg in RunArg:
+            if run_arg.value == key or run_arg.alias == key:
+                return run_arg
+        raise ValueError(f"No RunArg found for key: {key}")
+
+    @staticmethod
+    def of_sys_argv(target: dict[str, any] = None) -> dict['RunArg', any]:
+        return RunArg.of_list(target, sys.argv)
+
+    @staticmethod
+    def of_list(target: dict[str, any] = None, source: list[str] = sys.argv) -> dict['RunArg', any]:
 
         if target is None:
             target = {}
@@ -67,7 +78,7 @@ class RunArg(str, Enum):
             if val is None or val == '':
                 continue
 
-            target[key] = RunArg.value_of(key, val)
+            target[RunArg.of(key)] = RunArg.value_of(key, val)
 
         return target
 

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+
 import logging
 
 from app.app import App
@@ -7,7 +8,7 @@ from app.run_arg import RunArg
 
 
 if __name__ == "__main__":
-    run_args = RunArg.get()
+    run_args = RunArg.of_sys_argv()
     logging.basicConfig(
         level=logging.DEBUG if run_args.get(RunArg.VERBOSE) is True else logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
