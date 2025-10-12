@@ -56,13 +56,33 @@ class TwitterPublisherConfig(PublisherConfig):
             'access_token_secret': os.environ[f"{_PREFIX}_TWITTER_ACCESS_TOKEN_SECRET"]
         }
 
+class RedditPublisherConfig(PublisherConfig):
+    @property
+    def endpoint(self) -> str:
+        return "https://www.reddit.com/dev/api"
+
+    @property
+    def credentials(self) -> dict[str, Any]:
+        app_id = "https://github.com/poshjosh/content-publisher"
+        app_version = "0.0.4"
+        username = os.environ[f"{_PREFIX}_REDDIT_USERNAME"]
+        return {
+            'client_id': os.environ[f"{_PREFIX}_REDDIT_CLIENT_ID"],
+            'client_secret': os.environ[f"{_PREFIX}_REDDIT_CLIENT_SECRET"],
+            'user_agent': f"python:{app_id}:{app_version} (by {username})",
+            'username': username,
+            'password': os.environ[f"{_PREFIX}_REDDIT_PASSWORD"],
+            'subreddit': os.environ.get(f"{_PREFIX}_REDDIT_SUBREDDIT", "test"),
+        }
+
 class Config:
     def __init__(self):
         self.__configs = {
             "youtube": YouTubePublisherConfig(),
             "facebook": FacebookPublisherConfig(),
             "x": TwitterPublisherConfig(),
-            "twitter": TwitterPublisherConfig()
+            "twitter": TwitterPublisherConfig(),
+            "reddit": RedditPublisherConfig()
         }
 
     def get_publisher_config(self, platform: str) -> PublisherConfig:

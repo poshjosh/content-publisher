@@ -34,6 +34,7 @@ import tweepy
 
 # Reddit API
 import praw
+from praw.models import InlineImage, InlineVideo
 
 from .google.google_oauth_token_generator import GoogleOAuthTokenGenerator
 
@@ -585,24 +586,29 @@ class RedditContentPublisher(SocialContentPublisher):
 
             result.add_step("Authenticated with Reddit API")
 
-            subreddit_name = self.credentials.get('subreddit', 'test')
-            subreddit = self.reddit.subreddit(subreddit_name)
+            subreddit = self.reddit.subreddit(self.credentials.get('subreddit', 'test'))
 
             title = content.title or content.description[:100]
 
-            if content.image_file or content.video_file:
-                # Submit media post
-                media_file = content.image_file or content.video_file
-                submission = subreddit.submit_image(
-                    title=title,
-                    image_path=media_file
-                )
-            else:
-                # Submit text post
-                submission = subreddit.submit(
-                    title=title,
-                    selftext=content.description
-                )
+            submission = subreddit.submit(
+                title=title,
+                selftext=content.description
+            )
+
+            if content.video_file or content.image_file:
+                try:
+                    if content.video_file:
+                        media = InlineVideo(path=content.video_file,
+                                            caption=f"video for article: {title}")
+                    else:
+                        media = InlineImage(path=content.image_file,
+                                            caption=f"image for article: {title}")
+                    body = "{media}\n\n" + content.description
+                    if not hasattr(submission, 'media_metadata'):
+                        submission.media_metadata = { "media": media }
+                    submission = submission._edit_experimental(body, inline_media={ "media": media })
+                except Exception as ex:
+                    result.add_step(f"Failed to add media to post. Reason: {str(ex)}", logging.WARNING)
 
             result.add_step(f"Post submitted successfully - ID: {submission.id}")
             result.post_url = submission.url
