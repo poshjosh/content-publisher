@@ -18,5 +18,9 @@ if __name__ == "__main__":
     dir_path = run_args.get(RunArg.DIR)
     text_title = run_args.get(RunArg.TEXT_TITLE)
     media_orientation = run_args.get(RunArg.MEDIA_ORIENTATION)
+    language_code = run_args.get(RunArg.LANGUAGE_CODE)
+    tags = run_args.get(RunArg.TAGS)
 
-    App().publish_content(platforms, Content.of_dir(dir_path, text_title, media_orientation))
+    content = Content.of_dir(dir_path, text_title, media_orientation, language_code, tags)
+
+    App().publish_content(platforms, content)

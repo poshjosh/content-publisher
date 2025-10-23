@@ -71,6 +71,8 @@ class Content:
     video_file: Optional[str] = None
     image_file: Optional[str] = None
     title: Optional[str] = None
+    language_code: Optional[str] = None
+    tags: Optional[List[str]] = None
     subtitle_files: Optional[Dict[str, str]] = None  # {'en': 'path/to/en.srt', 'es': 'path/to/es.vtt'}
 
     def __post_init__(self):
@@ -92,6 +94,8 @@ class Content:
     def of_dir(dir_path: str,
                title: str,
                content_orientation: str = "portrait",
+               language_code: str = "en",
+               tags: Optional[List[str]] = None,
                accept_file: Callable[[str], bool] = lambda arg: True) -> 'Content':
         if not dir_path:
             raise ValueError("Directory path is required")
@@ -161,7 +165,9 @@ class Content:
             video_file=video_file if os.path.exists(video_file) else None,
             image_file=image_file if os.path.exists(image_file) else None,
             title=title,
-            subtitle_files=subtitle_files
+            subtitle_files=subtitle_files,
+            language_code=language_code,
+            tags=tags
         )
 
 @dataclass
@@ -292,17 +298,26 @@ class YouTubeContentPublisher(SocialContentPublisher):
                 return result.as_failure("YouTube requires a video file")
 
             # Prepare video metadata
+            # https://developers.google.com/youtube/v3/docs/videos?hl=en#properties
             body = {
                 'snippet': {
                     'title': content.title or 'Untitled Video',
                     'description': content.description,
-                    'categoryId': 22 # People & Blogs
+                    'categoryId': 22, # People & Blogs
+                    'tags': ['trending']
                 },
                 'status': {
                     'privacyStatus': 'public',
                     'selfDeclaredMadeForKids': False
                 }
             }
+
+            if content.language_code:
+                body['snippet']['defaultLanguage'] = content.language_code
+                body['snippet']['defaultAudioLanguage'] = content.language_code
+
+            if content.tags:
+                body['snippet']['tags'] = content.tags
 
             # Create media upload object
             media = MediaFileUpload(

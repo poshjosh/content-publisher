@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.6] - 2025-10-23
+
+- Added run args `tags` and `language-code`.
+
 ## [0.0.5] - 2025-10-12
 
 - Implement posting to Reddit.

@@ -40,6 +40,8 @@ class RunArg(str, Enum):
     MEDIA_ORIENTATION = ('orientation', 'o', 'str', False, False, "landscape")
     PLATFORMS = ('platforms', 'p', 'list', False, False, ["youtube","facebook","x","reddit"])
     TEXT_TITLE = ('text-title', 't', 'str')
+    TAGS = ('tags', 'tg', 'list', True, False, [])
+    LANGUAGE_CODE = ('language-code', 'l', 'str', True, False, 'en')
     VERBOSE = ('verbose', 'v', 'bool', True, False, False)
 
     @staticmethod

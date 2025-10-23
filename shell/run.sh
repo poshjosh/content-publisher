@@ -11,9 +11,9 @@ printf "\nWorking from: %s\n" "$(pwd)"
 dir="/Users/chinomso/Desktop/live-above-3D/aideas-docker-mount/input"
 title="Why was Lucifer able to attack God?"
 
-python3 main.py -p youtube -o portrait -d "$dir" -t "${title} #shorts"
+python3 main.py -p youtube -o portrait -d "$dir" -t "${title} #shorts" -tg "#YHWH, #God #angelmichael #lucifer, #christianity"
 
-python3 main.py -p youtube,reddit -o landscape -d "$dir" -t title
+python3 main.py -p youtube,reddit -o landscape -d "$dir" -t title -tg "#YHWH, #God #angelmichael #lucifer, #christianity"
 
 
 
