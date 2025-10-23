@@ -64,7 +64,7 @@ class RedditPublisherConfig(PublisherConfig):
     @property
     def credentials(self) -> dict[str, Any]:
         app_id = "https://github.com/poshjosh/content-publisher"
-        app_version = "0.0.5"
+        app_version = "0.0.6"
         username = os.environ[f"{_PREFIX}_REDDIT_USERNAME"]
         return {
             'client_id': os.environ[f"{_PREFIX}_REDDIT_CLIENT_ID"],
