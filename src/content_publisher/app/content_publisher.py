@@ -17,7 +17,7 @@ import logging
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Dict, List, Any, Optional, Callable
+from typing import Dict, List, Any, Optional, Callable, Union
 from datetime import datetime
 from enum import Enum
 
@@ -95,7 +95,7 @@ class Content:
                title: str,
                content_orientation: str = "portrait",
                language_code: str = "en",
-               tags: Optional[List[str]] = None,
+               tags: Union[List[str], bool] = False,
                accept_file: Callable[[str], bool] = lambda arg: True) -> 'Content':
         if not dir_path:
             raise ValueError("Directory path is required")
@@ -103,23 +103,8 @@ class Content:
             raise ValueError(f"Invalid directory path: {dir_path}")
 
         text_file_names = [e for e in os.listdir(dir_path) if e.endswith(".txt") and accept_file(e)]
-        if not text_file_names:
-            raise ValueError(f"No .txt file found in directory: {dir_path}")
 
-        if len(text_file_names) == 1:
-            text_file_name = text_file_names[0]
-        elif 'video-description.txt' in text_file_names:
-            text_file_name = "video-description.txt"
-        elif 'description.txt' in text_file_names:
-            text_file_name = "description.txt"
-        elif 'video-content.txt' in text_file_names:
-            text_file_name = "video-content.txt"
-        elif 'video.txt' in text_file_names:
-            text_file_name = "video.txt"
-        elif 'content.txt' in text_file_names:
-            text_file_name = "content.txt"
-        else:
-            raise ValueError(f"Multiple .txt files found in directory: {dir_path}. Please ensure only one description file is present or name one as 'video-description.txt' or 'description.txt'.")
+        text_file_name = Content.__determine_text_file_name(text_file_names, dir_path)
 
         with open(os.path.join(dir_path, text_file_name), 'r') as f:
             description = f.read()
@@ -160,6 +145,10 @@ class Content:
                     subtitle_files[lang_code] = os.path.join(subtitles_dir_path, file_name)
                     logger.debug(f"Found subtitle file for {lang_code}={file_name}")
 
+        if tags is True:
+            tags = Content.extract_hashtags_from_text(description, 500)
+            logger.debug(f"Extracted tags from description: {tags}")
+
         return Content(
             description=description,
             video_file=video_file if os.path.exists(video_file) else None,
@@ -169,6 +158,42 @@ class Content:
             language_code=language_code,
             tags=tags
         )
+
+    @staticmethod
+    def __determine_text_file_name(text_file_names: list, dir_path) -> str:
+        if not text_file_names:
+            raise ValueError(f"No .txt file found in directory: {dir_path}")
+
+        if len(text_file_names) == 1:
+            return text_file_names[0]
+        if 'video-description.txt' in text_file_names:
+            return "video-description.txt"
+        if 'description.txt' in text_file_names:
+            return "description.txt"
+        if 'video-content.txt' in text_file_names:
+            return "video-content.txt"
+        if 'video.txt' in text_file_names:
+            return "video.txt"
+        if 'content.txt' in text_file_names:
+            return "content.txt"
+        raise ValueError(f"Multiple .txt files found in directory: {dir_path}. Please "
+                         f"ensure only one description file is present or name one as "
+                         f"'video-description.txt' or 'description.txt'.")
+
+    @staticmethod
+    def extract_hashtags_from_text(text: str, max_tags_length: int) -> list[str]:
+        import re
+        hashtags = re.findall(r'#\w+', text)
+        all_tags = [tag.lstrip('#') for tag in hashtags]
+        total_len = 0
+        result = []
+        for tag in all_tags:
+            tag_len = len(tag) + (1 if result else 0) # add one for comma
+            if total_len + tag_len > max_tags_length:
+                break
+            result.append(tag)
+            total_len += tag_len
+        return result
 
 @dataclass
 class PostRequest:
@@ -197,6 +222,9 @@ class PostResult:
         self.steps_log.append(f"{datetime.now().strftime('%H:%M:%S')} - {step}")
         logger.log(log_level, step)
         return self
+
+    def as_auth_failure(self) -> 'PostResult':
+        return self.as_failure("Authentication failed")
 
     def as_failure(self, message: str) -> 'PostResult':
         self.success = False
@@ -289,13 +317,17 @@ class YouTubeContentPublisher(SocialContentPublisher):
         if result is None:
             result = PostResult()
         try:
-            if not self.authenticate():
-                return result.as_failure("Authentication failed")
-
-            result.add_step("Authenticated with YouTube API")
+            if content.tags:
+                if len(",".join([f'\"{e}\"' for e in content.tags if ' ' in e])) > 500:
+                    return result.as_failure("Total length of tags exceeds maximum of 500 chars.")
 
             if not content.video_file:
                 return result.as_failure("YouTube requires a video file")
+
+            if not self.authenticate():
+                return result.as_auth_failure()
+
+            result.add_step("Authenticated with YouTube API")
 
             # Prepare video metadata
             # https://developers.google.com/youtube/v3/docs/videos?hl=en#properties
@@ -457,7 +489,7 @@ class FacebookContentPublisher(SocialContentPublisher):
             result = PostResult()
         try:
             if not self.authenticate():
-                return result.as_failure("Authentication failed")
+                return result.as_auth_failure()
 
             result.add_step("Authenticated with Facebook API")
 
@@ -529,7 +561,7 @@ class XContentPublisher(SocialContentPublisher):
             result = PostResult()
         try:
             if not self.authenticate():
-                return result.as_failure("Authentication failed")
+                return result.as_auth_failure()
 
             result.add_step("Authenticated with Twitter API")
 
@@ -597,7 +629,7 @@ class RedditContentPublisher(SocialContentPublisher):
             result = PostResult()
         try:
             if not self.authenticate():
-                return result.as_failure("Authentication failed")
+                return result.as_auth_failure()
 
             result.add_step("Authenticated with Reddit API")
 
