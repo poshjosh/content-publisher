@@ -628,12 +628,17 @@ class RedditContentPublisher(SocialContentPublisher):
         if result is None:
             result = PostResult()
         try:
+
+            subreddit = self.credentials.get('subreddit')
+            if not subreddit:
+                return result.as_failure("Subreddit not specified.")
+
             if not self.authenticate():
                 return result.as_auth_failure()
 
             result.add_step("Authenticated with Reddit API")
 
-            subreddit = self.reddit.subreddit(self.credentials.get('subreddit', 'test'))
+            subreddit = self.reddit.subreddit(subreddit)
 
             title = content.title or content.description[:100]
 
@@ -641,6 +646,8 @@ class RedditContentPublisher(SocialContentPublisher):
                 title=title,
                 selftext=content.description
             )
+
+            approve: bool = True
 
             if content.video_file or content.image_file:
                 try:
@@ -654,10 +661,19 @@ class RedditContentPublisher(SocialContentPublisher):
                     if not hasattr(submission, 'media_metadata'):
                         submission.media_metadata = { "media": media }
                     submission = submission._edit_experimental(body, inline_media={ "media": media })
+
                 except Exception as ex:
+
+                    approve = False
+
                     result.add_step(f"Failed to add media to post. Reason: {str(ex)}", logging.WARNING)
 
             result.add_step(f"Post submitted successfully - ID: {submission.id}")
+
+            if approve:
+                submission.mod.approve()
+                result.add_step("Post approved")
+
             result.post_url = submission.url
             result.platform_response = {'id': submission.id, 'url': submission.url}
             return result.as_success("Content posted successfully to Reddit")
