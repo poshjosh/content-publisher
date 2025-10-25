@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "content-publisher"
-version = "v0.0.6"
+version = "v0.0.7"
 description = "A Python app for publishing content to social media"
 authors = [
     {name = "Chinomso Ikwuagwu"}
@@ -27,6 +27,8 @@ keywords = ["publish content", "automation", "ai", "artificial intelligence"]
 dependencies = [
     "facebook-sdk",
     "google-api-python-client",
+    "google-auth",
+    "google-auth-httplib2",
     "google-auth-oauthlib",
     "praw",
     "requests",
