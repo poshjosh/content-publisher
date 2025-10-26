@@ -1,3 +1,5 @@
+from enum import Enum, unique
+
 from abc import ABC
 
 import os
@@ -5,6 +7,22 @@ import os
 from typing import Any
 
 _PREFIX = "CONTENT_PUBLISHER"
+
+
+@unique
+class SocialPlatformType(Enum):
+    """Supported social media platforms"""
+    FACEBOOK = "facebook"
+    META = "meta"  # Alias for facebook
+    REDDIT = "reddit"
+    TWITTER = "twitter" # Alias for x
+    X = "x"
+    YOUTUBE = "youtube"
+
+    @staticmethod
+    def values() -> list[str]:
+        return [str(SocialPlatformType(e).value) for e in SocialPlatformType]
+
 
 class PublisherConfig(ABC):
     @property
@@ -75,14 +93,15 @@ class RedditPublisherConfig(PublisherConfig):
             'subreddit': os.environ.get(f"{_PREFIX}_REDDIT_SUBREDDIT", "test"),
         }
 
-class Config:
+class ConfigFactory:
     def __init__(self):
         self.__configs = {
-            "youtube": YouTubePublisherConfig(),
-            "facebook": FacebookPublisherConfig(),
-            "x": TwitterPublisherConfig(),
-            "twitter": TwitterPublisherConfig(),
-            "reddit": RedditPublisherConfig()
+            SocialPlatformType.FACEBOOK.value: FacebookPublisherConfig(),
+            SocialPlatformType.META.value: FacebookPublisherConfig(),
+            SocialPlatformType.REDDIT.value: RedditPublisherConfig(),
+            SocialPlatformType.TWITTER.value: TwitterPublisherConfig(),
+            SocialPlatformType.X.value: TwitterPublisherConfig(),
+            SocialPlatformType.YOUTUBE.value: YouTubePublisherConfig()
         }
 
     def get_publisher_config(self, platform: str) -> PublisherConfig:

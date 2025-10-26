@@ -37,17 +37,9 @@ import praw
 from praw.models import InlineImage, InlineVideo
 
 from .google.google_oauth_token_generator import GoogleOAuthTokenGenerator
+from .config import SocialPlatformType
 
 logger = logging.getLogger(__name__)
-
-class SocialPlatformType(Enum):
-    """Supported social media platforms"""
-    YOUTUBE = "youtube"
-    FACEBOOK = "facebook"
-    META = "meta"  # Alias for facebook
-    X = "x"
-    REDDIT = "reddit"
-    TWITTER = "twitter" # Alias for x
 
 class PostType(Enum):
     VIDEO = "video"
@@ -254,7 +246,7 @@ class SocialContentPublisher(ABC):
         self.supported_post_types = List[PostType]
 
     @abstractmethod
-    def authenticate(self) -> bool:
+    def _authenticate(self) -> bool:
         """Authenticate with the platform API"""
         pass
 
@@ -279,10 +271,6 @@ class SocialContentPublisher(ABC):
 
         return result.as_success("Content validation passed")
 
-    def add_subtitles(self, subtitle_files: Dict[str, str], video_id: str, result: Optional[PostResult] = None) -> PostResult:
-        """Add subtitles to posted content if supported"""
-        return result.as_failure("Subtitle addition not implemented")
-
 class YouTubeContentPublisher(SocialContentPublisher):
     """Handler for YouTube API"""
 
@@ -293,7 +281,7 @@ class YouTubeContentPublisher(SocialContentPublisher):
         self.supported_post_types = [PostType.VIDEO, PostType.IMAGE]
         self.service = None
 
-    def authenticate(self) -> bool:
+    def _authenticate(self) -> bool:
         """Authenticate with YouTube API"""
         try:
             # Assuming credentials contain OAuth token or service account info
@@ -324,7 +312,7 @@ class YouTubeContentPublisher(SocialContentPublisher):
             if not content.video_file:
                 return result.as_failure("YouTube requires a video file")
 
-            if not self.authenticate():
+            if not self._authenticate():
                 return result.as_auth_failure()
 
             result.add_step("Authenticated with YouTube API")
@@ -468,7 +456,7 @@ class FacebookContentPublisher(SocialContentPublisher):
         self.supported_post_types = [PostType.VIDEO, PostType.IMAGE, PostType.TEXT]
         self.graph = None
 
-    def authenticate(self) -> bool:
+    def _authenticate(self) -> bool:
         """Authenticate with Facebook Graph API"""
         try:
             access_token = self.credentials.get('access_token')
@@ -488,7 +476,7 @@ class FacebookContentPublisher(SocialContentPublisher):
         if result is None:
             result = PostResult()
         try:
-            if not self.authenticate():
+            if not self._authenticate():
                 return result.as_auth_failure()
 
             result.add_step("Authenticated with Facebook API")
@@ -537,7 +525,7 @@ class XContentPublisher(SocialContentPublisher):
         self.supported_post_types = [PostType.VIDEO, PostType.IMAGE, PostType.TEXT]
         self.api = None
 
-    def authenticate(self) -> bool:
+    def _authenticate(self) -> bool:
         """Authenticate with Twitter API"""
         try:
             auth = tweepy.OAuth1UserHandler(
@@ -560,7 +548,7 @@ class XContentPublisher(SocialContentPublisher):
         if result is None:
             result = PostResult()
         try:
-            if not self.authenticate():
+            if not self._authenticate():
                 return result.as_auth_failure()
 
             result.add_step("Authenticated with Twitter API")
@@ -605,7 +593,7 @@ class RedditContentPublisher(SocialContentPublisher):
         self.supported_post_types = [PostType.VIDEO, PostType.IMAGE, PostType.TEXT]
         self.reddit = None
 
-    def authenticate(self) -> bool:
+    def _authenticate(self) -> bool:
         """Authenticate with Reddit API"""
         try:
             self.reddit = praw.Reddit(
@@ -633,7 +621,7 @@ class RedditContentPublisher(SocialContentPublisher):
             if not subreddit:
                 return result.as_failure("Subreddit not specified.")
 
-            if not self.authenticate():
+            if not self._authenticate():
                 return result.as_auth_failure()
 
             result.add_step("Authenticated with Reddit API")
@@ -684,12 +672,12 @@ class RedditContentPublisher(SocialContentPublisher):
 class SocialContentPublisherFactory:
     def __init__(self):
         self.publishers = {
-            SocialPlatformType.YOUTUBE.value: YouTubeContentPublisher,
             SocialPlatformType.FACEBOOK.value: FacebookContentPublisher,
             SocialPlatformType.META.value: FacebookContentPublisher,
-            SocialPlatformType.X.value: XContentPublisher,
+            SocialPlatformType.REDDIT.value: RedditContentPublisher,
             SocialPlatformType.TWITTER.value: XContentPublisher,
-            SocialPlatformType.REDDIT.value: RedditContentPublisher
+            SocialPlatformType.X.value: XContentPublisher,
+            SocialPlatformType.YOUTUBE.value: YouTubeContentPublisher
         }
 
     def get_publisher(self, api_config: SocialPlatformApiConfig) -> Optional[SocialContentPublisher]:
