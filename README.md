@@ -1,6 +1,7 @@
 # Content Publisher
 
-A Python app for publishing content to social media
+A Python app for publishing content to multiple social media platforms
+with support for videos, images, text, and subtitles where supported.
 
 ## Requirements
 
@@ -12,9 +13,11 @@ A Python app for publishing content to social media
 
 ## Overview
 
+Supported social media platforms: Facebook (Meta), Reddit, TikTok, X (Twitter), YouTube
+
 Given the following:
 
-*	A social media platform name e.g. YouTube, Meta (Facebook), TikTok, Instagram, x (Twitter), Reddit.
+*	A social media platform name e.g. `facebook`, `reddit`, `tiktok`, `x` or `youtube`.
 *	An API endpoint for the social media platform.
 *	API credentials
 *	A content object comprising the following:

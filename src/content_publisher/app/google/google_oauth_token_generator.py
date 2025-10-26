@@ -177,6 +177,7 @@ class GoogleOAuthTokenGenerator:
             Dictionary containing access_token, refresh_token, and other token info
         """
         try:
+            # TODO - Use CredentialsStore and Credentials classes for storage
             token_file = os.path.expandvars(os.path.expanduser(token_file))
             os.makedirs(os.path.dirname(token_file), exist_ok=True)
 
@@ -409,7 +410,7 @@ class GoogleOAuthTokenGenerator:
                 scopes.append(f"{scope_url}/{scope_name}")
         return scopes
 
-def main():
+def example():
     """
     Example usage and interactive CLI
     """
@@ -481,4 +482,9 @@ def main():
         logger.exception("OAuth process failed")
 
 if __name__ == "__main__":
-    main()
+    print("\n" + "="*70)
+    print("Google OAuth Token Generator")
+    print("="*70)
+
+    # Uncomment to run example:
+    # example()
