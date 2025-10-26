@@ -7,7 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
 - Approval of reddit post.
+
+### Changed
+
+- Save oauth tokens to `~/.content-publisher/oauth-tokens/`
 
 ## [0.0.7] - 2025-10-25
 

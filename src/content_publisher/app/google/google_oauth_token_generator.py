@@ -161,8 +161,10 @@ class GoogleOAuthTokenGenerator:
 
         raise RuntimeError("Could not start OAuth callback server on any port")
 
-    def get_tokens_interactive(self, scopes: List[str], save_tokens: bool = True,
-                               token_file: str = 'google_oauth_tokens.pickle') -> Dict[str, Any]:
+    def get_tokens_interactive(self,
+                               scopes: List[str],
+                               save_tokens: bool = True,
+                               token_file: str = '~/.content-publisher/oauth-tokens/google.pickle') -> Dict[str, Any]:
         """
         Get OAuth tokens using interactive browser flow
 
@@ -175,6 +177,9 @@ class GoogleOAuthTokenGenerator:
             Dictionary containing access_token, refresh_token, and other token info
         """
         try:
+            token_file = os.path.expandvars(os.path.expanduser(token_file))
+            os.makedirs(os.path.dirname(token_file), exist_ok=True)
+
             logger.debug("Starting interactive OAuth flow")
 
             # Check for existing valid tokens
