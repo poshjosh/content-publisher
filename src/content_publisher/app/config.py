@@ -93,10 +93,11 @@ class XPublisherConfig(PublisherConfig):
     @property
     def credentials(self) -> dict[str, Any]:
         return {
-            'consumer_key': os.environ[f"{_PREFIX}_X_CONSUMER_KEY"],
-            'consumer_secret': os.environ[f"{_PREFIX}_X_CONSUMER_SECRET"],
+            'consumer_key': os.environ[f"{_PREFIX}_X_API_KEY"],
+            'consumer_secret': os.environ[f"{_PREFIX}_X_API_KEY_SECRET"],
             'access_token': os.environ[f"{_PREFIX}_X_ACCESS_TOKEN"],
-            'access_token_secret': os.environ[f"{_PREFIX}_X_ACCESS_TOKEN_SECRET"]
+            'access_token_secret': os.environ[f"{_PREFIX}_X_ACCESS_TOKEN_SECRET"],
+            'bearer_token': os.environ[f"{_PREFIX}_X_BEARER_TOKEN"]
         }
 
 

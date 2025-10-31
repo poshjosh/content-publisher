@@ -8,14 +8,21 @@ cd "$WORKING_DIR" || (printf "\nCould not change to working dir: %s\n" "$WORKING
 
 printf "\nWorking from: %s\n" "$(pwd)"
 
-dir="/Users/chinomso/Desktop/live-above-3D/aideas-docker-mount/input"
-title="What Atheists should know about YHWH"
+dir="/Users/chinomso/Desktop/live-above-3D/content-publisher-sample-dir"
+title="Faith to convince the Universe"
+tags="#pray #faith #speak #conviction #victory #universe #believe"
 
-python3 main.py -p tiktok -o portrait -d "$dir" -t "$title"
+# X/Twitter
+#python3 main.py -p x -o landscape -d "$dir" -t "$title" -tg "$tags"
 
-#python3 main.py -p youtube -o portrait -d "$dir" -t "${title} #shorts" -tg "#YHWH, #God #angelmichael #lucifer, #christianity"
-#
-#python3 main.py -p youtube,reddit -o landscape -d "$dir" -t title -tg "#YHWH, #God #angelmichael #lucifer, #christianity"
+# TikTok
+#python3 main.py -p tiktok -o portrait -d "$dir" -t "$title"
+
+# YouTube shorts
+#python3 main.py -p youtube -o portrait -d "$dir" -t "${title} #shorts" -tg "$tags"
+
+# YouTube
+#python3 main.py -p youtube,reddit -o landscape -d "$dir" -t title -tg "$tags"
 
 
 
