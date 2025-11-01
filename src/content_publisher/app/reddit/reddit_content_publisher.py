@@ -5,53 +5,42 @@ from typing import Dict, Any, Optional
 import praw
 from praw.models import InlineImage, InlineVideo
 
-from ..content_publisher import SocialContentPublisher, PostType, Content, PostResult
+from ..content_publisher import SocialContentPublisher, PostType, Content, PostResult, PostRequest
 
 logger = logging.getLogger(__name__)
 
 
 class RedditContentPublisher(SocialContentPublisher):
-    """Handler for Reddit API"""
-
-    def __init__(self, api_endpoint: str, credentials: Dict[str, Any]):
-        super().__init__(api_endpoint, credentials, [PostType.VIDEO, PostType.IMAGE, PostType.TEXT])
-        self.supports_subtitles = False
+    def __init__(self, _, credentials: Dict[str, Any]):
+        super().__init__([PostType.VIDEO, PostType.IMAGE, PostType.TEXT])
+        self.__credentials = credentials
         self.reddit = None
 
-    def _authenticate(self) -> bool:
-        """Authenticate with Reddit API"""
-        try:
-            self.reddit = praw.Reddit(
-                client_id=self.credentials['client_id'],
-                client_secret=self.credentials['client_secret'],
-                user_agent=self.credentials.get('user_agent', 'Social Media Poster'),
-                username=self.credentials['username'],
-                password=self.credentials['password']
-            )
+    def authenticate(self, request: PostRequest):
+        self.reddit = praw.Reddit(
+            client_id=self.__credentials['client_id'],
+            client_secret=self.__credentials['client_secret'],
+            user_agent=self.__credentials.get('user_agent', 'Social Media Poster'),
+            username=self.__credentials['username'],
+            password=self.__credentials['password']
+        )
 
-            # Test authentication
-            self.reddit.user.me()
-            return True
-        except Exception as ex:
-            logger.error(f"Reddit authentication failed: {ex}")
-            return False
+        # Test authentication
+        self.reddit.user.me()
 
-    def post_content(self, content: Content, result: Optional[PostResult] = None) -> PostResult:
+    def post_content(self, request: PostRequest, result: Optional[PostResult] = None) -> PostResult:
         """Post content to Reddit"""
         if result is None:
             result = PostResult()
         try:
 
-            subreddit = self.credentials.get('subreddit')
+            subreddit = self.__credentials.get('subreddit')
             if not subreddit:
                 return result.as_failure("Subreddit not specified.")
 
-            if not self._authenticate():
-                return result.as_auth_failure()
-
-            result.add_step("Authenticated with Reddit API")
-
             subreddit = self.reddit.subreddit(subreddit)
+
+            content: Content = request.content
 
             title = content.title or content.description[:100]
 

@@ -7,11 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Customizations for credentials filename and scopes.
+- Facebook content publisher.
+- X/Twitter content publisher.
+
 ## [0.0.8] - 2025-10-26
 
 ### Added
 
-- X/Twitter content publisher.
 - TikTok content publisher.
 - Approval of reddit post.
 

@@ -23,4 +23,9 @@ if __name__ == "__main__":
 
     content = Content.of_dir(dir_path, text_title, media_orientation, language_code, tags)
 
-    App().publish_content(platforms, content)
+    configs = {
+        "facebook": { "credentials_scopes": ['business_management', 'pages_show_list'] },
+        "tiktok": { "callback_path": '/callback' }
+    }
+
+    App().publish_content(platforms, content, configs)

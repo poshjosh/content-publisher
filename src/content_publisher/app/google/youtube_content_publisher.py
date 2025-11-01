@@ -7,8 +7,8 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from google.oauth2.credentials import Credentials
 
-from ..content_publisher import SocialContentPublisher, PostType, Content, PostResult
-from .google_oauth_token_generator import GoogleOAuthTokenGenerator
+from ..content_publisher import SocialContentPublisher, PostType, Content, PostResult, PostRequest
+from .google_oauth import GoogleOAuth
 
 logger = logging.getLogger(__name__)
 
@@ -17,46 +17,43 @@ class YouTubeContentPublisher(SocialContentPublisher):
     """Handler for YouTube API"""
 
     def __init__(self, api_endpoint: str, credentials: Dict[str, Any]):
-        super().__init__(api_endpoint, credentials, [PostType.VIDEO, PostType.IMAGE, PostType.TEXT])
+        super().__init__([PostType.VIDEO, PostType.IMAGE, PostType.TEXT])
+        self.__credentials = credentials
         self.__version = api_endpoint.split("/")[-1]
-        self.supports_subtitles = True
         self.service = None
 
-    def _authenticate(self) -> bool:
-        """Authenticate with YouTube API"""
-        try:
-            # Assuming credentials contain OAuth token or service account info
-            if 'oauth_token' in self.credentials:
-                creds = Credentials(token=self.credentials['oauth_token'])
-                self.service = build('youtube', self.__version, credentials=creds)
-            elif 'client_id' in self.credentials and 'client_secret' in self.credentials:
-                creds_dict = self._get_youtube_credentials_interactively(self.credentials['client_id'], self.credentials['client_secret'])
-                creds = Credentials(token=creds_dict['oauth_token'], refresh_token=creds_dict.get('refresh_token'))
-                self.service = build('youtube', self.__version, credentials=creds)
-            else:
-                # Alternative: use API key for read-only operations
-                self.service = build('youtube', self.__version, developerKey=self.credentials.get('api_key'))
-            return True
-        except Exception as ex:
-            logger.error(f"YouTube authentication failed: {ex}")
-            return False
+    def authenticate(self, request: PostRequest):
+        service_name = 'youtube'
+        # Assuming credentials contain OAuth token or service account info
+        if 'oauth_token' in self.__credentials:
+            credentials = Credentials(token=self.__credentials['oauth_token'])
+            self.service = build(service_name, self.__version, credentials=credentials)
+        elif 'client_id' in self.__credentials and 'client_secret' in self.__credentials:
+            oauth = GoogleOAuth({**self.__credentials, **request.post_config})
+            # We need permission 'youtube.force-ssl' to upload subtitles
+            scopes = oauth.to_scopes(['youtube', 'youtube.force-ssl'])
+            credentials_filename = request.post_config.get("credentials_filename", "youtube.pickle")
+            token_data = oauth.get_credentials_interactively(scopes, credentials_filename).data
+            credentials = oauth.credentials_from_dict(token_data)
+            self.service = build(service_name, self.__version, credentials=credentials)
+        else:
+            # Alternative: use API key for read-only operations
+            self.service = build(service_name, self.__version, developerKey=self.__credentials.get('api_key'))
 
-    def post_content(self, content: Content, result: Optional[PostResult] = None) -> PostResult:
+    def post_content(self, request: PostRequest, result: Optional[PostResult] = None) -> PostResult:
         """Post video content to YouTube"""
         if result is None:
             result = PostResult()
         try:
+
+            content: Content = request.content
+
             if content.tags:
                 if len(",".join([f'\"{e}\"' for e in content.tags if ' ' in e])) > 500:
                     return result.as_failure("Total length of tags exceeds maximum of 500 chars.")
 
             if not content.video_file:
                 return result.as_failure("YouTube requires a video file")
-
-            if not self._authenticate():
-                return result.as_auth_failure()
-
-            result.add_step("Authenticated with YouTube API")
 
             # Prepare video metadata
             # https://developers.google.com/youtube/v3/docs/videos?hl=en#properties
@@ -123,7 +120,7 @@ class YouTubeContentPublisher(SocialContentPublisher):
         if result is None:
             result = PostResult()
         try:
-            if image_file and PostType.IMAGE not in self.supported_post_types:
+            if image_file and PostType.IMAGE not in self.get_supported_post_types():
                 return result.as_failure("Platform does not support image content")
 
             media = MediaFileUpload(image_file, chunksize=-1)
@@ -147,9 +144,9 @@ class YouTubeContentPublisher(SocialContentPublisher):
         if result is None:
             result = PostResult()
         try:
-            if not self.supports_subtitles or not subtitle_files:
-                message = "Adding of subtitles is not supported"
-                return result.as_failure(message)
+            if not subtitle_files:
+                message = "Subtitles file(s) not provided"
+                return result.add_step(message, logging.WARNING)
 
             for language, subtitle_file in subtitle_files.items():
                 media = MediaFileUpload(subtitle_file, chunksize=-1)
@@ -174,16 +171,3 @@ class YouTubeContentPublisher(SocialContentPublisher):
         except Exception as ex:
             message = f"Failed to add subtitles: {str(ex)}"
             return result.as_failure(message)
-
-    @staticmethod
-    def _get_youtube_credentials_interactively(client_id: str, client_secret: str) -> Dict[str, str]:
-        generator = GoogleOAuthTokenGenerator(client_id, client_secret)
-
-        # We need permission 'youtube.force-ssl' to upload subtitles
-        scopes = generator.to_scopes(['youtube', 'youtube.force-ssl'])
-        tokens = generator.get_tokens_interactive(scopes, save_tokens=True)
-
-        return {
-            'oauth_token': tokens['access_token'],
-            'refresh_token': tokens['refresh_token']
-        }

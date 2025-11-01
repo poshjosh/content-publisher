@@ -15,7 +15,7 @@ class AppTest(unittest.TestCase):
 
                 success_message = "success"
                 mock_publisher = mock.Mock(spec=SocialContentPublisher)
-                mock_publisher._authenticate.return_value = True
+                mock_publisher.authenticate.return_value = True
                 mock_publisher.validate_content.return_value = PostResult(success=True, message="valid")
                 mock_publisher.post_content.return_value = PostResult(success=True, message=success_message)
                 mock_get_publisher.return_value = mock_publisher

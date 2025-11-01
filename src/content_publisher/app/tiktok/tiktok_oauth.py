@@ -1,421 +1,150 @@
 """
-TikTok OAuth 2.0 Flow Implementation
-
-This script implements the complete OAuth flow for TikTok API authentication:
-1. Generates authorization URL
-2. Redirects user to TikTok for authorization
-3. Receives callback with authorization code
-4. Exchanges code for access token
+TikTok OAuth 2.0 Implementation
 
 Reference:
 - https://developers.tiktok.com/doc/oauth-user-access-token-management
 - https://developers.tiktok.com/doc/login-kit-web-settings/
 """
 import hashlib
-
-from dataclasses import dataclass
-
-import secrets
-import urllib.parse
-import webbrowser
-from http.server import HTTPServer, BaseHTTPRequestHandler
-from typing import Optional, Tuple
 import logging
-import threading
-import time
+import secrets
 
-from .tiktok import TikTokAPIError
+import requests
+import urllib.parse
+from typing import Any, Optional
+
+from ..oauth import Credentials, OAuth, OAuthCallbackHandler
 
 logger = logging.getLogger(__name__)
 
-class TikTokAuthorizationError(TikTokAPIError):
-    """Exception raised for authorization failures"""
-    pass
 
+class TikTokOAuth(OAuth):
+    __authorize_url = "https://www.tiktok.com/v2/auth/authorize/"
 
-@dataclass
-class TikTokOAuthConfig:
-    """Configuration for TikTok OAuth flow"""
-    client_key: str
-    client_secret: str
-    scopes: list[str]
-    redirect_uri: str
-    authorize_url: str = "https://www.tiktok.com/v2/auth/authorize/"
+    def __init__(self, api_endpoint: str, config: dict[str, str]):
+        super().__init__(config)
+        self.__api_endpoint = api_endpoint
+        self.__client_key = config['client_key']
+        self.__client_secret = config['client_secret']
+        self.__redirect_uri = config['redirect_uri']
+        self.__callback_path = config.get('callback_path')
 
-    def __post_init__(self):
-        """Validate configuration"""
-        if not self.client_key:
-            raise ValueError("client_key is required")
-        if not self.client_secret:
-            raise ValueError("client_secret is required")
-        if not self.scopes:
-            raise ValueError("At least one scope is required")
-        if not self.redirect_uri:
-            raise ValueError("redirect_uri is required")
-        if not self.authorize_url:
-            raise ValueError("authorize_url is required")
+    def get_credentials_interactively(self, scopes: list[str], credentials_file: Optional[str] = None) -> Credentials:
+        callback_path = self.__callback_path
+        code_verifier, code_challenge = TikTokOAuth.generate_code_challenge_pair()
+        challenge_params = { "code_challenge": code_challenge }
+        verifier_params = { "code_verifier": code_verifier }
 
+        class TikTokOAuthCallbackHandler(OAuthCallbackHandler):
+            def get_callback_path(self) -> Optional[str]:
+                return callback_path
 
-class OAuthCallbackHandler(BaseHTTPRequestHandler):
-    """HTTP request handler for OAuth callback"""
+            def get_params_to_verify(self) -> Optional[dict[str,str]]:
+                # TODO - Caused - Error code: 400, Message: Invalid/missing parameter: code_verifier
+                # return verifier_params
+                return None
 
-    authorization_code: Optional[str] = None
-    error: Optional[str] = None
-    code_verifier: Optional[str] = None
+        def get_auth_code() -> str:
+            auth_url = self._build_auth_url(scopes, challenge_params)
+            return self.prompt_user_to_authorize_app(auth_url, TikTokOAuthCallbackHandler)
 
-    def log_message(self, format, *args):
-        """Override to use logger instead of print"""
-        logger.debug(f"Callback: {format % args}")
+        def fetch_credentials(credentials: Optional[Credentials]):
+            if credentials and credentials.is_expired() and credentials.is_refreshable():
+                token_data = self._refresh_access_token(credentials.refresh_token)
+                return Credentials(token_data).with_scopes(scopes) if token_data else None
 
-    def do_GET(self):
-        """Handle GET request from OAuth callback"""
-        # Parse query parameters
-        parsed_path = urllib.parse.urlparse(self.path)
-        query_params = urllib.parse.parse_qs(parsed_path.query)
+            token_data = self._exchange_auth_code_for_access_token(get_auth_code(), verifier_params)
+            return Credentials(token_data).with_scopes(scopes)
 
-        # Check if this is the callback endpoint
-        if parsed_path.path != '/callback':
-            self.send_error(404, "Not Found")
-            return
+        if not credentials_file:
+            return fetch_credentials(None)
 
-        # Check the csr_token/state parameter
-        code_verifier = query_params.get('code_verifier', [None])[0]
-        if code_verifier != self.code_verifier:
-            logger.warning("Code verifier mismatch!")
-            # TODO - Find out why this is failing and fix
-            # self.send_error(403, "Invalid code verifier")
-            # OAuthCallbackHandler.error = "Code verifier mismatch"
-            # return
+        return self.credentials_store.load_or_fetch(fetch_credentials, credentials_file, scopes)
 
-        # Check for authorization code
-        if 'code' in query_params:
-            OAuthCallbackHandler.authorization_code = query_params['code'][0]
-            logger.debug("Authorization code received")
-
-            # Send success response to browser
-            self.send_response(200)
-            self.send_header('Content-type', 'text/html')
-            self.end_headers()
-
-            html = """
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>TikTok Authorization Successful</title>
-                <style>
-                    body {
-                        font-family: Arial, sans-serif;
-                        display: flex;
-                        justify-content: center;
-                        align-items: center;
-                        height: 100vh;
-                        margin: 0;
-                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                    }
-                    .container {
-                        background: white;
-                        padding: 40px;
-                        border-radius: 10px;
-                        box-shadow: 0 10px 25px rgba(0,0,0,0.2);
-                        text-align: center;
-                    }
-                    h1 { color: #333; margin-bottom: 20px; }
-                    p { color: #666; font-size: 18px; }
-                    .success { color: #4CAF50; font-size: 48px; margin-bottom: 20px; }
-                </style>
-            </head>
-            <body>
-                <div class="container">
-                    <div class="success">✓</div>
-                    <h1>Authorization Successful!</h1>
-                    <p>You have successfully authorized the application.</p>
-                    <p>You can close this window and return to the application.</p>
-                </div>
-            </body>
-            </html>
-            """
-            self.wfile.write(html.encode())
-
-        elif 'error' in query_params:
-            error = query_params['error'][0]
-            error_description = query_params.get('error_description', ['Unknown error'])[0]
-            OAuthCallbackHandler.error = f"{error}: {error_description}"
-            logger.error(f"Authorization error: {OAuthCallbackHandler.error}")
-
-            # Send error response to browser
-            self.send_response(400)
-            self.send_header('Content-type', 'text/html')
-            self.end_headers()
-
-            html = f"""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>TikTok Authorization Failed</title>
-                <style>
-                    body {{
-                        font-family: Arial, sans-serif;
-                        display: flex;
-                        justify-content: center;
-                        align-items: center;
-                        height: 100vh;
-                        margin: 0;
-                        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-                    }}
-                    .container {{
-                        background: white;
-                        padding: 40px;
-                        border-radius: 10px;
-                        box-shadow: 0 10px 25px rgba(0,0,0,0.2);
-                        text-align: center;
-                    }}
-                    h1 {{ color: #333; margin-bottom: 20px; }}
-                    p {{ color: #666; font-size: 16px; }}
-                    .error {{ color: #f5576c; font-size: 48px; margin-bottom: 20px; }}
-                    .error-details {{ 
-                        background: #ffe0e0;
-                        padding: 15px;
-                        border-radius: 5px;
-                        margin-top: 20px;
-                        text-align: left;
-                    }}
-                </style>
-            </head>
-            <body>
-                <div class="container">
-                    <div class="error">✗</div>
-                    <h1>Authorization Failed</h1>
-                    <p>There was an error during authorization.</p>
-                    <div class="error-details">
-                        <strong>Error:</strong> {error}<br>
-                        <strong>Description:</strong> {error_description}
-                    </div>
-                    <p style="margin-top: 20px;">Please try again or contact support.</p>
-                </div>
-            </body>
-            </html>
-            """
-            self.wfile.write(html.encode())
-
-        else:
-            self.send_error(400, "Missing authorization code or error")
-            OAuthCallbackHandler.error = "Invalid callback parameters"
-
-
-class TikTokOAuth:
-    """TikTok OAuth 2.0 Flow Manager"""
-
-    def __init__(self, config: TikTokOAuthConfig):
-        """
-        Initialize OAuth manager
-
-        Args:
-            config: TikTokOAuthConfig instance
-        """
-        self.config = config
-        self.server: Optional[HTTPServer] = None
-        self.server_thread: Optional[threading.Thread] = None
-        self.code_verifier: Optional[str] = None
-        logger.debug("TikTok OAuth manager initialized")
-
-    def get_authorization_code(
-            self,
-            port: int = 8080,
-            timeout: int = 300,
-            auto_open_browser: bool = True
-    ) -> str:
-        """
-        Complete OAuth flow and get authorization code
-
-        Args:
-            port: Port for callback server
-            timeout: Maximum time to wait for authorization
-            auto_open_browser: Automatically open browser for authorization
-
-        Returns:
-            Authorization code string
-
-        Raises:
-            Exception: If authorization fails
-        """
-        try:
-
-            code_verifier, code_challenge = TikTokOAuth.generate_code_challenge_pair()
-
-            self.start_callback_server(code_verifier, port)
-
-            auth_url = self.generate_authorization_url(code_challenge, code_verifier)
-
-            # Display URL to user
-            print("\n" + "="*70)
-            print("TikTok Authorization Required")
-            print("="*70)
-            print("\nPlease authorize this application by visiting the following URL:\n")
-            print(f"  {auth_url}\n")
-            print("="*70 + "\n")
-
-            # Open browser automatically
-            if auto_open_browser:
-                logger.debug("Opening browser for authorization...")
-                webbrowser.open(auth_url)
-                print("✓ Browser opened automatically\n")
-            else:
-                print("Copy and paste the URL above into your browser\n")
-
-            print("Waiting for authorization...")
-            print("(This window will update once you authorize the app)\n")
-
-            # Wait for authorization
-            code, error = self.wait_for_authorization(timeout)
-
-            if error:
-                raise TikTokAuthorizationError(f"Authorization failed: {error}")
-
-            if not code:
-                raise TikTokAuthorizationError("No authorization code received")
-
-            print("\n" + "="*70)
-            print("✓ Authorization Successful!")
-            print("="*70 + "\n")
-
-            self.code_verifier = code_verifier
-
-            return code
-
-        finally:
-            # Always stop the server
-            self.stop_callback_server()
-
-
-    def generate_authorization_url(self, code_challenge: str, code_verifier: str) -> str:
+    def _build_auth_url(self, scopes: list[str], additional_params: Optional[dict[str, Any]] = None) -> str:
         params = {
-            "client_key": self.config.client_key,
-            "client_secret": self.config.client_secret,
+            "client_key": self.__client_key,
+            "client_secret": self.__client_secret,
             "response_type": "code",
-            "scope": ",".join(self.config.scopes),
-            "redirect_uri": self.config.redirect_uri,
-            "code_challenge": code_challenge,
+            "scope": ",".join(scopes),
+            "redirect_uri": self.__redirect_uri,
             "code_challenge_method": "S256"
         }
 
+        if additional_params:
+            params.update(additional_params)
+
         query_string = urllib.parse.urlencode(params)
-        auth_url = f"{self.config.authorize_url}?{query_string}"
+        return f"{TikTokOAuth.__authorize_url}?{query_string}"
 
-        logger.debug("Authorization URL generated")
-        return auth_url
+    def _exchange_auth_code_for_access_token(self,
+                                             authorization_code: str,
+                                             additional_params: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+        url = f"{self.__api_endpoint}/oauth/token/"
 
-    def start_callback_server(self, code_verifier: str, port: int = 8080) -> None:
+        headers = { "Content-Type": "application/x-www-form-urlencoded" }
+
+        payload = {
+            "client_key": self.__client_key,
+            "client_secret": self.__client_secret,
+            "redirect_uri": self.__redirect_uri,
+            "code": authorization_code,
+            "grant_type": "authorization_code"
+        }
+
+        if additional_params:
+            payload.update(additional_params)
+
+        logger.debug("Requesting access token...")
+        response = requests.post(url, headers=headers, data=payload, timeout=30)
+        self._log_response(response)
+        response.raise_for_status()
+
+        return response.json()
+
+    def _refresh_access_token(self, refresh_token: str) -> Optional[dict[str, Any]]:
         """
-        Start local HTTP server to receive OAuth callback
-
-        Args:
-            code_verifier: The code verifier
-            port: Port number for callback server
-        """
-        OAuthCallbackHandler.code_verifier = code_verifier
-
-        # Reset class variables
-        OAuthCallbackHandler.authorization_code = None
-        OAuthCallbackHandler.error = None
-
-        # Create server
-        self.server = HTTPServer(('localhost', port), OAuthCallbackHandler)
-
-        # Run server in separate thread
-        self.server_thread = threading.Thread(target=self.server.serve_forever)
-        self.server_thread.daemon = True
-        self.server_thread.start()
-
-        logger.debug(f"Callback server started on port {port}")
-
-    def stop_callback_server(self) -> None:
-        """Stop the callback server"""
-        if self.server:
-            self.server.shutdown()
-            self.server.server_close()
-            logger.debug("Callback server stopped")
-
-    def wait_for_authorization(self, timeout: int = 300) -> Tuple[Optional[str], Optional[str]]:
-        """
-        Wait for user to complete authorization
-
-        Args:
-            timeout: Maximum time to wait in seconds (default: 5 minutes)
+        Refresh access token using refresh token
 
         Returns:
-            Tuple of (authorization_code, error)
+            New access token string
         """
-        logger.debug(f"Waiting for authorization (timeout: {timeout}s)...")
+        if not refresh_token:
+            raise ValueError("No refresh token available")
 
-        start_time = time.time()
-        while time.time() - start_time < timeout:
-            # Check if we received authorization code
-            if OAuthCallbackHandler.authorization_code:
-                code = OAuthCallbackHandler.authorization_code
-                logger.debug("Authorization code received")
-                return code, None
+        url = f"{self.__api_endpoint}/oauth/token/"
 
-            # Check if we received error
-            if OAuthCallbackHandler.error:
-                error = OAuthCallbackHandler.error
-                logger.error(f"Authorization error: {error}")
-                return None, error
+        headers = { "Content-Type": "application/x-www-form-urlencoded" }
 
-            # Wait a bit before checking again
-            time.sleep(0.5)
+        payload = {
+            "client_key": self.__client_key,
+            "client_secret": self.__client_secret,
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token
+        }
 
-        logger.error("Authorization timeout")
-        return None, "Authorization timeout - user did not complete the flow"
+        logger.debug("Refreshing access token...")
+        response = requests.post(url, headers=headers, data=payload, timeout=30)
+        self._log_response(response)
+        response.raise_for_status()
+
+        return response.json()
+
+    @staticmethod
+    def _log_response(response):
+        try:
+            logger.debug(f"Response json: {response.json()}")
+        except Exception:
+            logger.debug(f"Response: {response}")
+
+    @staticmethod
+    def generate_code_challenge_pair():
+        random_str = TikTokOAuth._generate_random_string(60)
+        sha256_hash = hashlib.sha256(random_str.encode('utf-8')).digest()
+        code_challenge = sha256_hash.hex()  # Convert to hex string
+        return random_str, code_challenge
 
     @staticmethod
     def _generate_random_string(length: int):
         characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~'
         return ''.join(secrets.choice(characters) for _ in range(length))
-
-    @staticmethod
-    def generate_code_challenge_pair():
-        code_verifier = TikTokOAuth._generate_random_string(60)
-        sha256_hash = hashlib.sha256(code_verifier.encode('utf-8')).digest()
-        code_challenge = sha256_hash.hex()  # Convert to hex string
-        return code_verifier, code_challenge
-
-    def get_code_verifier(self) -> Optional[str]:
-        return self.code_verifier
-
-
-def usage_example():
-    config = TikTokOAuthConfig(
-        client_key="your_client_key_here",
-        client_secret="your_client_secret_here",
-        redirect_uri="http://localhost:8080/callback",
-        scopes=[
-            "user.debug.basic",
-            "user.debug.profile",
-            "video.list",
-            "video.upload",
-            "video.publish"
-        ]
-    )
-
-    try:
-        auth_code = TikTokOAuth(config).get_authorization_code()
-        print(f"Authorization Code: {auth_code}\n")
-    except Exception as e:
-        print(f"Error: {e}")
-
-
-if __name__ == "__main__":
-    print("\n" + "="*70)
-    print("TikTok OAuth Flow - Examples")
-    print("="*70)
-
-    print("\nAvailable examples:")
-    print("1. Basic OAuth flow")
-    print("2. Advanced OAuth flow with custom configuration")
-    print("3. Complete flow with content posting")
-    print("\nNote: Replace 'your_client_key_here' and 'your_client_secret_here'")
-    print("      with your actual TikTok app credentials.")
-    print("\n" + "="*70 + "\n")
-
-    # Uncomment to run examples:
-    # usage_example()

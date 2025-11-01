@@ -31,6 +31,10 @@ class PublisherConfig(ABC):
         raise NotImplementedError
 
     @property
+    def api_version(self) -> str:
+        raise NotImplementedError
+
+    @property
     def credentials(self) -> dict[str, Any]:
         raise NotImplementedError
 
@@ -41,20 +45,34 @@ class PublisherConfig(ABC):
 class FacebookPublisherConfig(PublisherConfig):
     @property
     def endpoint(self) -> str:
-        return "https://graph.facebook.com/v18.0"
+        return f"https://graph.facebook.com/{self.api_version}"
+
+    @property
+    def api_version(self) -> str:
+        return "v24.0"
 
     @property
     def credentials(self) -> dict[str, Any]:
-        return {
-            'access_token': os.environ[f"{_PREFIX}_FACEBOOK_ACCESS_TOKEN"],
-            'page_id': os.environ[f"{_PREFIX}_FACEBOOK_PAGE_ID"]
+        credentials = {
+            'client_id': os.environ[f"{_PREFIX}_FACEBOOK_CLIENT_ID"],
+            'client_secret': os.environ[f"{_PREFIX}_FACEBOOK_CLIENT_SECRET"],
+            'redirect_uri': 'http://localhost:8080/callback',
+            'api_version': self.api_version
         }
+        page_id = os.environ.get(f"{_PREFIX}_FACEBOOK_PAGE_ID")
+        if page_id:
+            credentials['page_id'] = page_id
+        return credentials
 
 
 class RedditPublisherConfig(PublisherConfig):
     @property
     def endpoint(self) -> str:
         return "https://www.reddit.com/dev/api"
+
+    @property
+    def api_version(self) -> str:
+        return ""
 
     @property
     def credentials(self) -> dict[str, Any]:
@@ -68,27 +86,37 @@ class RedditPublisherConfig(PublisherConfig):
             'username': username,
             'password': os.environ[f"{_PREFIX}_REDDIT_PASSWORD"],
             'subreddit': os.environ.get(f"{_PREFIX}_REDDIT_SUBREDDIT", "test"),
+            'api_version': self.api_version
         }
 
 
 class TikTokPublisherConfig(PublisherConfig):
     @property
     def endpoint(self) -> str:
-        return "https://open.tiktokapis.com/v2"
+        return f"https://open.tiktokapis.com/{self.api_version}"
+
+    @property
+    def api_version(self) -> str:
+        return "v2"
 
     @property
     def credentials(self) -> dict[str, Any]:
         return {
             'client_key': os.environ[f"{_PREFIX}_TIKTOK_CLIENT_KEY"],
             'client_secret': os.environ[f"{_PREFIX}_TIKTOK_CLIENT_SECRET"],
-            'redirect_uri': 'http://localhost:8080/callback'
+            'redirect_uri': 'http://localhost:8080/callback',
+            'api_version': self.api_version
         }
 
 
 class XPublisherConfig(PublisherConfig):
     @property
     def endpoint(self) -> str:
-        return "https://api.twitter.com/2"
+        return f"https://api.twitter.com/{self.api_version}"
+
+    @property
+    def api_version(self) -> str:
+        return "2"
 
     @property
     def credentials(self) -> dict[str, Any]:
@@ -97,20 +125,26 @@ class XPublisherConfig(PublisherConfig):
             'consumer_secret': os.environ[f"{_PREFIX}_X_API_KEY_SECRET"],
             'access_token': os.environ[f"{_PREFIX}_X_ACCESS_TOKEN"],
             'access_token_secret': os.environ[f"{_PREFIX}_X_ACCESS_TOKEN_SECRET"],
-            'bearer_token': os.environ[f"{_PREFIX}_X_BEARER_TOKEN"]
+            'bearer_token': os.environ[f"{_PREFIX}_X_BEARER_TOKEN"],
+            'api_version': self.api_version
         }
 
 
 class YouTubePublisherConfig(PublisherConfig):
     @property
     def endpoint(self) -> str:
-        return "https://www.googleapis.com/youtube/v3"
+        return f"https://www.googleapis.com/youtube/{self.api_version}"
+
+    @property
+    def api_version(self) -> str:
+        return "v3"
 
     @property
     def credentials(self) -> dict[str, Any]:
         return {
             "client_id": os.environ[f"{_PREFIX}_GOOGLE_CLIENT_ID"],
-            "client_secret": os.environ[f"{_PREFIX}_GOOGLE_CLIENT_SECRET"]
+            "client_secret": os.environ[f"{_PREFIX}_GOOGLE_CLIENT_SECRET"],
+            'api_version': self.api_version
         }
 
 

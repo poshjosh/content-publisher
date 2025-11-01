@@ -1,99 +1,57 @@
-import time
-
 import logging
 import requests
 from pathlib import Path
 from typing import Dict, Any, Optional
 
-from .tiktok import TikTokAPIError
-from .tiktok_authenticator import TikTokAuthenticator
-from .tiktok_oauth import TikTokOAuthConfig, TikTokOAuth
-from ..content_publisher import SocialContentPublisher, PostType, Content, PostResult
-from ..credentials import CredentialsStore, Credentials
+from ..content_publisher import SocialContentPublisher, PostType, Content, PostResult, PostRequest
+from .tiktok_oauth import TikTokOAuth
 
 logger = logging.getLogger(__name__)
 
-class TikTokUploadError(TikTokAPIError):
+
+class TikTokError(Exception):
+    """Base exception for TikTok API error"""
+    pass
+
+
+class TikTokUploadError(TikTokError):
     """Exception raised for upload failures"""
     pass
 
 
-class TikTokValidationError(TikTokAPIError):
-    """Exception raised for validation errors"""
+class TikTokValidationError(TikTokError):
+    """Exception raised for validation error"""
     pass
 
 
-class TikTokCredentials(Credentials):
-    def __init__(self, data: Dict[str, Any]):
-        super().__init__(data)
-
-    def is_expired(self) -> bool:
-        expires_at = self.data.get('expires_at')
-        if not expires_at:
-            return True
-        # Add 60 second buffer
-        return time.time() >= (expires_at - 60)
-
-
 class TikTokContentPublisher(SocialContentPublisher):
-    """Handles posting content to TikTok"""
-
     def __init__(self, api_endpoint: str, credentials: Dict[str, Any]):
-        """
-        Initialize content poster
+        super().__init__([PostType.VIDEO, PostType.IMAGE, PostType.TEXT])
+        self.__api_endpoint = api_endpoint.rstrip('/')
+        self.__request_timeout = 30
+        self.__credentials = credentials
+        self.__access_token = None
 
-        Args:
-            api_endpoint: TikTok API base URL
-            credentials: Dict containing 'client_key' and 'client_secret'
-        """
-        super().__init__(api_endpoint.rstrip('/'), credentials, [PostType.VIDEO, PostType.IMAGE, PostType.TEXT])
-        self.supports_subtitles = False
-        self.authenticator = TikTokAuthenticator(api_endpoint, credentials)
-        self.credentials_store = CredentialsStore()
+    def authenticate(self, request: PostRequest):
+        scopes = request.post_config.get("credentials_scopes",
+                                         ["user.info.basic", "video.upload", "video.publish"])
+        filename = request.post_config.get("credentials_filename", "tiktok.pickle")
+        oauth = TikTokOAuth(self.__api_endpoint, {**self.__credentials, **request.post_config})
+        self.__access_token = oauth.get_credentials_interactively(scopes, filename).access_token
 
-    def _authenticate(self) -> bool:
-        filename = "tiktok.pickle"
-        scopes = ["user.info.basic", "video.upload", "video.publish"]
-
-        token_creds = self.credentials_store.load(filename, scopes)
-        if token_creds:
-            if token_creds.is_expired():
-
-                self.authenticator.refresh_access_token()
-                token_creds = TikTokCredentials(self.authenticator.get_credentials(scopes))
-                self.credentials_store.save(filename, token_creds)
-            self.authenticator.set_credentials(token_creds)
-        else:
-            config = TikTokOAuthConfig(
-                client_key=self.credentials['client_key'],
-                client_secret=self.credentials['client_secret'],
-                scopes=scopes,
-                redirect_uri=self.credentials['redirect_uri'],
-            )
-            oauth = TikTokOAuth(config)
-            authorization_code: str = oauth.get_authorization_code()
-
-            self.authenticator.get_access_token(authorization_code, oauth.get_code_verifier())
-
-            token_creds = TikTokCredentials(self.authenticator.get_credentials(scopes))
-            self.credentials_store.save(filename, token_creds)
-
-        return token_creds.access_token is not None
-
-    def post_content(self, content: Content, result: Optional[PostResult] = None) -> PostResult:
+    def post_content(self, request: PostRequest, result: Optional[PostResult] = None) -> PostResult:
         """
         Post content to TikTok
 
         Args:
-            content: Content object with video/image and metadata
+            request: PostRequest containing the Content object with video/image and metadata
             result: Optional PostResult object to track progress
 
         Returns:
             PostResult containing the post URL or error information
 
         Raises:
-            TikTokValidationError: If content validation fails
-            TikTokAuthenticationError: If authentication fails
+            TikTokValidationError: If content or other validation fails
             TikTokUploadError: If upload fails
         """
 
@@ -102,10 +60,7 @@ class TikTokContentPublisher(SocialContentPublisher):
 
         try:
 
-            if not self._authenticate():
-                return result.as_auth_failure()
-
-            result.add_step("Authenticated with TikTok API")
+            content: Content = request.content
 
             init_response = self._initialize_upload(content)
             upload_url = init_response.get('upload_url')
@@ -143,11 +98,10 @@ class TikTokContentPublisher(SocialContentPublisher):
         Returns:
             Upload initialization response
         """
-        access_token = self.authenticator.ensure_valid_token()
-        url = f"{self.api_endpoint}/post/publish/video/init/"
+        url = f"{self.__api_endpoint}/post/publish/video/init/"
 
         headers = {
-            "Authorization": f"Bearer {access_token}",
+            "Authorization": f"Bearer {self._require_access_token()}",
             "Content-Type": "application/json; charset=UTF-8"
         }
 
@@ -171,22 +125,18 @@ class TikTokContentPublisher(SocialContentPublisher):
             }
         }
 
-        try:
-            # logger.debug("Initializing upload session...")
-            response = requests.post(url, headers=headers, json=payload, timeout=30)
+        # logger.debug("Initializing upload session...")
+        response = requests.post(url, headers=headers, json=payload, timeout=self.__request_timeout)
+        self._log_response(response)
 
-            data = response.json()
+        data = response.json()
 
-            if data.get('data'):
-                # logger.debug("Upload session initialized successfully")
-                return data['data']
-            else:
-                error = {**data, 'status_code': response.status_code}
-                raise TikTokUploadError(f"Failed to initialize upload.\n{error}")
-
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Upload initialization failed: {e}")
-            raise TikTokUploadError(f"Upload initialization failed: {e}")
+        if data.get('data'):
+            # logger.debug("Upload session initialized successfully")
+            return data['data']
+        else:
+            error = {**data, 'status_code': response.status_code}
+            raise TikTokUploadError(f"Failed to initialize upload.\n{error}")
 
     def _upload_file(self, upload_url: str, file_path: str) -> dict:
         """
@@ -196,37 +146,30 @@ class TikTokContentPublisher(SocialContentPublisher):
             upload_url: Upload URL from initialization
             file_path: Path to file to upload
         """
-        try:
-            # logger.debug(f"Uploading file: {file_path}")
+        # logger.debug(f"Uploading file: {file_path}")
 
-            with open(file_path, 'rb') as file:
-                headers = {
-                    "Content-Type": "video/mp4" if file_path.endswith('.mp4') else "image/jpeg"
-                }
+        with open(file_path, 'rb') as file:
+            headers = {
+                "Content-Type": "video/mp4" if file_path.endswith('.mp4') else "image/jpeg"
+            }
 
-                response = requests.put(
-                    upload_url,
-                    data=file,
-                    headers=headers,
-                    timeout=300  # 5 minutes for large files
-                )
-                response.raise_for_status()
+            response = requests.put(
+                upload_url,
+                data=file,
+                headers=headers,
+                timeout=300  # 5 minutes for large files
+            )
+            self._log_response(response)
+            response.raise_for_status()
 
-            data = response.json()
+        data = response.json()
 
-            if response.status_code < 300:
-                # logger.debug("File uploaded successfully")
-                return data
-            else:
-                error = {**data, 'status_code': response.status_code}
-                raise TikTokUploadError(f"Failed to upload file.\n{error}")
-
-        except requests.exceptions.RequestException as e:
-            logger.error(f"File upload failed: {e}")
-            raise TikTokUploadError(f"File upload failed: {e}")
-        except IOError as e:
-            logger.error(f"File read error: {e}")
-            raise TikTokUploadError(f"File read error: {e}")
+        if response.status_code < 300:
+            # logger.debug("File uploaded successfully")
+            return data
+        else:
+            error = {**data, 'status_code': response.status_code}
+            raise TikTokUploadError(f"Failed to upload file.\n{error}")
 
     def _post_content(self, content: Content, upload_id: str) -> Dict[str, Any]:
         """
@@ -239,11 +182,10 @@ class TikTokContentPublisher(SocialContentPublisher):
         Returns:
             Publish response
         """
-        access_token = self.authenticator.ensure_valid_token()
-        url = f"{self.api_endpoint}/post/publish/content/init/"
+        url = f"{self.__api_endpoint}/post/publish/content/init/"
 
         headers = {
-            "Authorization": f"Bearer {access_token}",
+            "Authorization": f"Bearer {self._require_access_token()}",
             "Content-Type": "application/json"
         }
 
@@ -285,20 +227,27 @@ class TikTokContentPublisher(SocialContentPublisher):
             "media_type": "PHOTO"
         }
 
+        logger.debug("Publishing content...")
+        response = requests.post(url, json=payload, headers=headers, timeout=self.__request_timeout)
+        self._log_response(response)
+        response.raise_for_status()
+
+        data = response.json()
+
+        if data.get('data'):
+            logger.debug("Content published successfully")
+            return data['data']
+        else:
+            error_msg = data.get('message', 'Unknown error')
+            raise TikTokUploadError(f"Failed to publish content: {error_msg}")
+
+    def _require_access_token(self)  -> str:
+        if not self.__access_token:
+            raise TikTokUploadError("Access has not been granted. Please first authenticate.")
+        return self.__access_token
+
+    def _log_response(self, response: requests.Response):
         try:
-            logger.debug("Publishing content...")
-            response = requests.post(url, json=payload, headers=headers, timeout=30)
-            response.raise_for_status()
-
-            data = response.json()
-
-            if data.get('data'):
-                logger.debug("Content published successfully")
-                return data['data']
-            else:
-                error_msg = data.get('message', 'Unknown error')
-                raise TikTokUploadError(f"Failed to publish content: {error_msg}")
-
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Content publish failed: {e}")
-            raise TikTokUploadError(f"Content publish failed: {e}")
+            logger.debug(f"Response json: {response.json()}")
+        except Exception:
+            logger.debug(f"Response: {response}")

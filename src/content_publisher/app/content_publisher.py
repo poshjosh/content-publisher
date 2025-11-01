@@ -172,11 +172,23 @@ class Content:
             total_len += tag_len
         return result
 
+    def __str__(self) -> str:
+        return (f"{self.__class__.__name__}("
+                f"title={self.title}, "
+                f"video_file={self.video_file}, "
+                f"image_file={self.image_file}, "
+                f"language_code={self.language_code}, "
+                f"tags={len(self.tags) if self.tags else 0}, "
+                f"subtitle_files={len(self.subtitle_files) if self.subtitle_files else 0}, "
+                f"description={len(self.description)} chars, "
+                f"metadata={self.metadata})")
+
 @dataclass
 class PostRequest:
     """Request object containing platform and content information"""
     api_config: SocialPlatformApiConfig
     content: Content
+    post_config: Optional[Dict[str, Any]] = None
 
     def __post_init__(self):
         """Validate request object"""
@@ -184,6 +196,8 @@ class PostRequest:
             raise ValueError("Platform name is required")
         if not self.api_config.api_credentials:
             raise ValueError("API credentials are required")
+        if self.post_config is None:
+            self.post_config = {}
 
 @dataclass
 class PostResult:
@@ -228,20 +242,16 @@ class PostResult:
 class SocialContentPublisher(ABC):
     """Abstract base class for social media publishers"""
 
-    def __init__(self, api_endpoint: str, credentials: Dict[str, Any],
-                 supported_post_types: List[PostType] = List[PostType]):
-        self.api_endpoint = api_endpoint
-        self.credentials = credentials
-        self.supports_subtitles = False
-        self.supported_post_types = supported_post_types
+    def __init__(self, supported_post_types: List[PostType] = List[PostType]):
+        self.__supported_post_types = supported_post_types
 
     @abstractmethod
-    def _authenticate(self) -> bool:
+    def authenticate(self, request: PostRequest):
         """Authenticate with the platform API"""
         pass
 
     @abstractmethod
-    def post_content(self, content: Content, result: Optional[PostResult] = None) -> PostResult:
+    def post_content(self, request: PostRequest, result: Optional[PostResult] = None) -> PostResult:
         """Post content to the platform"""
         pass
 
@@ -253,14 +263,16 @@ class SocialContentPublisher(ABC):
         result.add_step("Validating content for platform")
 
         # Check if platform supports the media types
-        if content.video_file and PostType.VIDEO not in self.supported_post_types:
+        if content.video_file and PostType.VIDEO not in self.__supported_post_types:
             return result.as_failure("Platform does not support video content")
 
-        if content.image_file and PostType.IMAGE not in self.supported_post_types:
+        if content.image_file and PostType.IMAGE not in self.__supported_post_types:
             return result.as_failure("Platform does not support image content")
 
         return result.as_success("Content validation passed")
 
+    def get_supported_post_types(self) -> List[PostType]:
+        return self.__supported_post_types
 
 class SocialContentPublisherFactory:
     def __init__(self):
@@ -320,7 +332,11 @@ class SocialMediaPoster:
             if not result.success:
                 return result
 
-            return publisher.post_content(request.content, result)
+            publisher.authenticate(request)
+            result.add_step(f"Authenticated with {platform}")
+
+            logger.debug(f"Posting... \n{request.content}")
+            return publisher.post_content(request, result)
 
         except Exception as ex:
-            return result.as_failure(f"Unexpected error: {str(ex)}")
+            return result.as_failure_ex("Unexpected error", ex)

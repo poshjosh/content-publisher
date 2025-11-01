@@ -8,21 +8,11 @@ cd "$WORKING_DIR" || (printf "\nCould not change to working dir: %s\n" "$WORKING
 
 printf "\nWorking from: %s\n" "$(pwd)"
 
+platforms="tiktok"
+orientation="landscape"
 dir="/Users/chinomso/Desktop/live-above-3D/content-publisher-sample-dir"
-title="Faith to convince the Universe"
+title="Stand by your words, even when they fail"
 tags="#pray #faith #speak #conviction #victory #universe #believe"
 
-# X/Twitter
-#python3 main.py -p x -o landscape -d "$dir" -t "$title" -tg "$tags"
-
-# TikTok
-#python3 main.py -p tiktok -o portrait -d "$dir" -t "$title"
-
-# YouTube shorts
-#python3 main.py -p youtube -o portrait -d "$dir" -t "${title} #shorts" -tg "$tags"
-
-# YouTube
-#python3 main.py -p youtube,reddit -o landscape -d "$dir" -t title -tg "$tags"
-
-
+python3 main.py -v true -p "$platforms" -o "$orientation" -d "$dir" -t "$title" -tg "$tags"
 
