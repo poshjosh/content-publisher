@@ -54,10 +54,11 @@ class FacebookContentPublisher(SocialContentPublisher):
                 # Post video
                 with open(content.video_file, 'rb') as video_file:
                     # facebook.GraphAPIError: (#100) The global id 100092339087423 is not allowed for this call
+                    max_len = 50000 #63206
                     post_args = {
                         "source": ("video", video_file),
-                        "title": content.title,
-                        "description": content.description
+                        "title": self._truncate_with_ellipsis(content.title or content.description),
+                        "description": self._truncate_with_ellipsis(content.description, max_len),
                     }
                     # facebook.GraphAPIError: (#100) No permission to publish the video
                     response = self.graph.request(

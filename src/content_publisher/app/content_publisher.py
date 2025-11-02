@@ -11,7 +11,6 @@ Note:
     Instagram API is limited
 
 """
-
 import os
 import logging
 
@@ -51,6 +50,11 @@ class Content:
     tags: Optional[List[str]] = None
     subtitle_files: Optional[Dict[str, str]] = None  # {'en': 'path/to/en.srt', 'es': 'path/to/es.vtt'}
     metadata: Optional[Dict[str, Any]] = None
+
+    def get_metadata(self, key: str, default: Any = None) -> Any:
+        if self.metadata and key in self.metadata:
+            return self.metadata[key]
+        return default
 
     def __post_init__(self):
         """Validate content object after initialization"""
@@ -131,9 +135,10 @@ class Content:
             video_file=video_file if os.path.exists(video_file) else None,
             image_file=image_file if os.path.exists(image_file) else None,
             title=title,
-            subtitle_files=subtitle_files,
             language_code=language_code,
-            tags=tags
+            tags=tags,
+            subtitle_files=subtitle_files,
+            metadata=None
         )
 
     @staticmethod
@@ -273,6 +278,10 @@ class SocialContentPublisher(ABC):
 
     def get_supported_post_types(self) -> List[PostType]:
         return self.__supported_post_types
+
+    @staticmethod
+    def _truncate_with_ellipsis(text: str, max_length: int = 100) -> str:
+        return f"{text[:max_length - 3]}..." if len(text) > max_length else text
 
 class SocialContentPublisherFactory:
     def __init__(self):

@@ -106,17 +106,8 @@ class TikTokContentPublisher(SocialContentPublisher):
         }
 
         video_size = Path(content.video_file).stat().st_size
-
         payload = {
-            "post_info": {
-                "title": content.title or content.description[:100],
-                "description": content.description,
-                "privacy_level": content.metadata.get('privacy_level', 'SELF_ONLY') if content.metadata else 'SELF_ONLY',
-                "disable_duet": False,
-                "disable_comment": False,
-                "disable_stitch": False,
-                "video_cover_timestamp_ms": 250
-            },
+            "post_info": self._build_post_info(content),
             "source_info": {
                 "source": "FILE_UPLOAD",
                 "video_size": video_size,
@@ -189,17 +180,6 @@ class TikTokContentPublisher(SocialContentPublisher):
             "Content-Type": "application/json"
         }
 
-        # Build post info
-        post_info = {
-            "title": content.title or content.description[:100],
-            "description": content.description,
-            "privacy_level": content.metadata.get('privacy_level', 'SELF_ONLY') if content.metadata else 'SELF_ONLY',
-            "disable_duet": False,
-            "disable_comment": False,
-            "disable_stitch": False,
-            "video_cover_timestamp_ms": 1000
-        }
-
         source_info = {
             "source": "FILE_UPLOAD",
             "upload_id": upload_id,
@@ -210,18 +190,8 @@ class TikTokContentPublisher(SocialContentPublisher):
         if content.image_file:
             source_info["photo_images"] = [content.image_file]
 
-        if content.language_code:
-            post_info["language"] = content.language_code
-
-        # No need as our tags are already in the description
-        # # Add hashtags
-        # if content.tags:
-        #     # TikTok expects hashtags in description
-        #     hashtags = " ".join([f"#{tag.lstrip('#')}" for tag in content.tags])
-        #     post_info["description"] = f"{content.description} {hashtags}".strip()
-
         payload = {
-            "post_info": post_info,
+            "post_info": self._build_post_info(content),
             "source_info": source_info,
             "post_mode": "DIRECT_POST",
             "media_type": "PHOTO"
@@ -245,6 +215,29 @@ class TikTokContentPublisher(SocialContentPublisher):
         if not self.__access_token:
             raise TikTokUploadError("Access has not been granted. Please first authenticate.")
         return self.__access_token
+
+    def _build_post_info(self, content: Content) -> Dict[str, Any]:
+        post_info = content.get_metadata('post_info', {
+            "language": content.language_code or "en",
+            "privacy_level": 'PUBLIC_TO_EVERYONE',
+            "disable_duet": False,
+            "disable_comment": False,
+            "disable_stitch": False,
+            "video_cover_timestamp_ms": 250
+        })
+        max_len = 2200 - 20
+        post_info.update({
+            "title": self._truncate_with_ellipsis(content.title or content.description),
+            "description": self._truncate_with_ellipsis(content.description, max_len),
+        })
+
+        # No need as our tags are already in the description
+        # # Add hashtags
+        # if content.tags:
+        #     # TikTok expects hashtags in description
+        #     hashtags = " ".join([f"#{tag.lstrip('#')}" for tag in content.tags])
+        #     post_info["description"] = f"{content.description} {hashtags}".strip()
+        return post_info
 
     def _log_response(self, response: requests.Response):
         try:

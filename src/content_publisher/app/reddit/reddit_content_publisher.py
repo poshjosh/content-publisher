@@ -42,11 +42,12 @@ class RedditContentPublisher(SocialContentPublisher):
 
             content: Content = request.content
 
-            title = content.title or content.description[:100]
+            title = self._truncate_with_ellipsis(content.title or content.description)
 
+            max_len = 40000 - 400
             submission = subreddit.submit(
                 title=title,
-                selftext=content.description
+                selftext=self._truncate_with_ellipsis(content.description, max_len)
             )
 
             approve: bool = True

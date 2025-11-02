@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Allow for customizing posts
+- truncate content based on platform length restriction
+
 ## [0.0.9] - 2025-11-01
 
 ### Added

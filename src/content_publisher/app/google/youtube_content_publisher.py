@@ -55,27 +55,28 @@ class YouTubeContentPublisher(SocialContentPublisher):
             if not content.video_file:
                 return result.as_failure("YouTube requires a video file")
 
-            # Prepare video metadata
             # https://developers.google.com/youtube/v3/docs/videos?hl=en#properties
+            snippet = content.get_metadata('snippet', {
+                # Note: 22=People & Blogs, 26=Howto & Style, 29=Nonprofits & Activism, 42=Shorts
+                'categoryId': 26,
+                'tags': content.tags if content.tags else ['trending'],
+                'defaultLanguage': content.language_code if content.language_code else 'en',
+                'defaultAudioLanguage': content.language_code if content.language_code else 'en'
+            })
+            max_len = 5000 - 50
+            snippet.update({
+                'title': self._truncate_with_ellipsis(content.title or content.description),
+                'description': self._truncate_with_ellipsis(content.description, max_len),
+            })
+            status = content.get_metadata('status', {
+                'privacyStatus': 'public',
+                'selfDeclaredMadeForKids': False
+            })
+
             body = {
-                'snippet': {
-                    'title': content.title or 'Untitled Video',
-                    'description': content.description,
-                    'categoryId': 22, # People & Blogs
-                    'tags': ['trending']
-                },
-                'status': {
-                    'privacyStatus': 'public',
-                    'selfDeclaredMadeForKids': False
-                }
+                'snippet': snippet,
+                'status': status
             }
-
-            if content.language_code:
-                body['snippet']['defaultLanguage'] = content.language_code
-                body['snippet']['defaultAudioLanguage'] = content.language_code
-
-            if content.tags:
-                body['snippet']['tags'] = content.tags
 
             # Create media upload object
             media = MediaFileUpload(

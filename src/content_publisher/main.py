@@ -25,7 +25,19 @@ if __name__ == "__main__":
 
     configs = {
         "facebook": { "credentials_scopes": ['business_management', 'pages_show_list'] },
-        "tiktok": { "callback_path": '/callback' }
+        "tiktok": {
+            "callback_path": '/callback',
+            # TODO - Remove this post_info, when we are able to post to TikTok
+            #  with privacy PUBLIC TO EVERYONE (i.e the default)
+            "post_info": {
+                "language": content.language_code or 'en',
+                "privacy_level": 'SELF_ONLY',
+                "disable_duet": False,
+                "disable_comment": False,
+                "disable_stitch": False,
+                "video_cover_timestamp_ms": 250
+            }
+        }
     }
 
     App().publish_content(platforms, content, configs)

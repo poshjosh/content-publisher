@@ -42,9 +42,9 @@ class XContentPublisher(SocialContentPublisher):
             #     result.add_step(f"Video uploaded, ID: {media.media_id}")
 
             # Post tweet
-            tweet_text = content.description[:280]  # Twitter character limit
-            if content.title:
-                tweet_text = f"{content.title}\n\n{content.description}"[:280]
+            max_len = 280 - 5
+            tweet_text = f"{content.title}\n\n{content.description}" if content.title else content.description
+            tweet_text = self._truncate_with_ellipsis(tweet_text, max_len)
 
             response = self.api_v2.create_tweet(text=tweet_text, media_ids=media_ids)
             result.platform_response = { "raw": response }
