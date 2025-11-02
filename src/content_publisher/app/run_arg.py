@@ -1,12 +1,13 @@
 import sys
 
 from enum import Enum, unique
+from typing import Any, Optional
 from .paths import Paths
 
 @unique
 class RunArg(str, Enum):
     def __new__(cls, value: str, alias: str = None, kind: str = 'str',
-                optional: bool = False, path: bool = False, default_value: any = None):
+                optional: bool = False, path: bool = False, default_value: Any = None):
         obj = str.__new__(cls, [value])
         obj._value_ = value
         obj.__alias = alias
@@ -33,7 +34,7 @@ class RunArg(str, Enum):
         return self.__path
 
     @property
-    def default_value(self) -> any:
+    def default_value(self) -> Any:
         return self.__default_value
 
     DIR = ('dir', 'd', 'str', False, True, "~/.content-publisher/input")
@@ -52,11 +53,13 @@ class RunArg(str, Enum):
         raise ValueError(f"No RunArg found for key: {key}")
 
     @staticmethod
-    def of_sys_argv(target: dict[str, any] = None) -> dict['RunArg', any]:
+    def of_sys_argv(target: dict[str, Any] = None) -> dict['RunArg', Any]:
         return RunArg.of_list(target, sys.argv)
 
     @staticmethod
-    def of_list(target: dict[str, any] = None, source: list[str] = sys.argv) -> dict['RunArg', any]:
+    def of_list(target: dict[str, Any] = None, source: Optional[list[str]] = None) -> dict['RunArg', Any]:
+        if source is None:
+            source = sys.argv
 
         if target is None:
             target = {}
@@ -85,7 +88,7 @@ class RunArg(str, Enum):
         return target
 
     @staticmethod
-    def value_of(key: str, value: any) -> any:
+    def value_of(key: str, value: Any) -> Any:
         try:
             for run_arg in RunArg:
                 if run_arg.value == key or run_arg.alias == key:
@@ -95,7 +98,7 @@ class RunArg(str, Enum):
             return value
 
     @staticmethod
-    def _parse(run_arg: 'RunArg', value: str) -> any:
+    def _parse(run_arg: 'RunArg', value: str) -> Any:
         if not value:
             return run_arg.default_value
         if run_arg.type == "bool":

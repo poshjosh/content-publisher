@@ -193,7 +193,7 @@ class TikTokContentPublisher(SocialContentPublisher):
         post_info = {
             "title": content.title or content.description[:100],
             "description": content.description,
-            "privacy_level": "PUBLIC_TO_EVERYONE",
+            "privacy_level": content.metadata.get('privacy_level', 'SELF_ONLY') if content.metadata else 'SELF_ONLY',
             "disable_duet": False,
             "disable_comment": False,
             "disable_stitch": False,

@@ -339,4 +339,4 @@ class SocialMediaPoster:
             return publisher.post_content(request, result)
 
         except Exception as ex:
-            return result.as_failure_ex("Unexpected error", ex)
+            return result.as_failure_ex(f"Unexpected error: {str(ex)}", ex)

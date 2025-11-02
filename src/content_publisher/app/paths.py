@@ -1,17 +1,17 @@
-from typing import Union
+from typing import Union, Any
 
 import os
 
 class Paths:
     @staticmethod
-    def get_path(value: any, extra: str = None, default: any = None) -> any:
+    def get_path(value: Any, extra: str = None, default: Any = None) -> Any:
         if not value:
             return default
         path = Paths.__resolve(value)
         return path if not extra else os.path.join(path, extra)
 
     @staticmethod
-    def require_path(value: any, error_message: Union[str, None] = "A required path was not provided") -> str:
+    def require_path(value: Any, error_message: Union[str, None] = "A required path was not provided") -> str:
         if not value:
             raise ValueError(error_message)
         path = Paths.__resolve(value)
