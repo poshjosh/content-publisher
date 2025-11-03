@@ -79,8 +79,9 @@ class Credentials:
 class CredentialsStore:
     def __init__(self, dir_path: str = '~/.content-publisher/oauth-tokens'):
         self.dir_path = os.path.expanduser(os.path.expandvars(dir_path)) if dir_path else ''
-        if self.dir_path:
-            os.makedirs(dir_path, exist_ok=True)
+        if self.dir_path and not os.path.exists(self.dir_path):
+            os.makedirs(self.dir_path, exist_ok=True)
+            logger.debug(f"Created directory {self.dir_path}")
 
     def load_or_fetch(self,
                       fetch: Callable[[Optional[Credentials]], Credentials],
@@ -99,11 +100,12 @@ class CredentialsStore:
         return fresh_creds    
 
     def load(self, filename: str, scopes: List[str]) -> Optional[Credentials]:
-        filename = os.path.join(self.dir_path, os.path.expanduser(os.path.expandvars(filename)))
+        filename = self._file_path(filename)
         if not os.path.exists(filename):
             logger.warning(f"Not found, file: {filename}.")
             return None
         try:
+            # logger.debug(f"Loading credentials from: {filename}")
             with open(filename, 'rb') as token:
                 creds_data = pickle.load(token)
                 creds = Credentials(creds_data if creds_data else {})
@@ -111,17 +113,32 @@ class CredentialsStore:
             if creds.is_valid(scopes):
                 return creds
             else:
-                os.remove(filename)
-                logger.debug("Deleted invalid/expired tokens")
+                try:
+                    os.remove(filename)
+                    logger.debug(f"Deleted invalid/expired credentials file: {filename}")
+                except Exception as ex:
+                    logger.debug(f"Failed to delete invalid/expired credentials file: {filename}. Reason: {ex}")
                 return None
         except Exception as ex:
-            logger.warning(f"Could not load existing credentials. Reason: {ex}")
+            logger.warning(f"Could not load credentials from: {filename}. Reason: {ex}")
             return None
 
-    def save(self, filename: str, credentials: Credentials):
-        filename = os.path.join(self.dir_path, os.path.expanduser(os.path.expandvars(filename)))
+    def save(self, filename: str, credentials: Credentials) -> bool:
+        filename = self._file_path(filename)
         try:
+            dirname = os.path.dirname(filename)
+            if not os.path.exists(dirname):
+                os.makedirs(dirname, exist_ok=True)
+                logger.debug(f"Created directory {dirname}")
+            # logger.debug(f"Saving credentials to: {filename}")
             with open(filename, 'wb') as credentials_file:
                 pickle.dump(credentials.data, credentials_file)
+            return True
         except Exception as ex:
-            logger.warning(f"Could not save credentials. Reason: {ex}")
+            logger.warning(f"Could not save credentials to: {filename}. Reason: {ex}")
+            return False
+
+    def _file_path(self, filename: str):
+        filename = filename.lstrip('/')
+        return os.path.join(self.dir_path, os.path.expanduser(os.path.expandvars(filename)))
+
