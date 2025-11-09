@@ -24,7 +24,6 @@ class YouTubeContentPublisher(SocialContentPublisher):
 
     def authenticate(self, request: PostRequest):
         service_name = 'youtube'
-        # Assuming credentials contain OAuth token or service account info
         if 'oauth_token' in self.__credentials:
             credentials = Credentials(token=self.__credentials['oauth_token'])
             self.service = build(service_name, self.__version, credentials=credentials)
@@ -37,8 +36,7 @@ class YouTubeContentPublisher(SocialContentPublisher):
             credentials = oauth.credentials_from_dict(token_data)
             self.service = build(service_name, self.__version, credentials=credentials)
         else:
-            # Alternative: use API key for read-only operations
-            self.service = build(service_name, self.__version, developerKey=self.__credentials.get('api_key'))
+            raise ValueError(f"Credentials insufficient for youtube authentication: {self.__credentials.keys()}")
 
     def post_content(self, request: PostRequest, result: Optional[PostResult] = None) -> PostResult:
         """Post video content to YouTube"""
@@ -101,11 +99,11 @@ class YouTubeContentPublisher(SocialContentPublisher):
             result.post_url = f"https://www.youtube.com/watch?v={video_id}"
             result.platform_response = response
 
-            if content.image_file:
+            if content.image_file and request.post_config.get('add_thumbnail', True) is True:
                 self.add_thumbnail(content.image_file, video_id, result)
 
             # Add subtitles if provided
-            if content.subtitle_files:
+            if content.subtitle_files and request.post_config.get('add_subtitles', True) is True:
                 self.add_subtitles(content.subtitle_files, video_id, result)
 
             if not result.success:

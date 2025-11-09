@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Allow users specify whether to add thumbnail or subtitles to YouTube video posts.
+
 ## [0.0.11] - 2025-11-03
 
 ### Fixed
