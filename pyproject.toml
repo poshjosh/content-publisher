@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "content-publisher"
-version = "v0.0.11"
+version = "v0.0.12"
 description = "A Python app for publishing content to social media"
 authors = [
     {name = "Chinomso Ikwuagwu"}

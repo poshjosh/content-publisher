@@ -1,9 +1,9 @@
 import logging
 import requests
-from pathlib import Path
 from typing import Dict, Any, Optional
 
 from ..content_publisher import SocialContentPublisher, PostType, Content, PostResult, PostRequest
+from ..media import Media
 from .tiktok_oauth import TikTokOAuth
 
 logger = logging.getLogger(__name__)
@@ -33,9 +33,9 @@ class TikTokContentPublisher(SocialContentPublisher):
         self.__access_token = None
 
     def authenticate(self, request: PostRequest):
-        scopes = request.post_config.get("credentials_scopes",
-                                         ["user.info.basic", "video.upload", "video.publish"])
-        filename = request.post_config.get("credentials_filename", "tiktok.pickle")
+        scopes = request.get("credentials_scopes",
+                             ["user.info.basic", "video.upload", "video.publish"])
+        filename = request.get("credentials_filename", "tiktok.pickle")
         oauth = TikTokOAuth(self.__api_endpoint, {**self.__credentials, **request.post_config})
         self.__access_token = oauth.get_credentials_interactively(scopes, filename).access_token
 
@@ -105,7 +105,7 @@ class TikTokContentPublisher(SocialContentPublisher):
             "Content-Type": "application/json; charset=UTF-8"
         }
 
-        video_size = Path(content.video_file).stat().st_size
+        video_size = Media.get_video_size_bytes(content.video_file)
         payload = {
             "post_info": self._build_post_info(content),
             "source_info": {

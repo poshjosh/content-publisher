@@ -26,7 +26,7 @@ class CredentialsTest(unittest.TestCase):
 
         self.assertEqual(loaded_credentials.access_token, "test-access-token")
         self.assertEqual(loaded_credentials.refresh_token, "test-refresh-token")
-        self.assertEqual(loaded_credentials.expires_in, 10000)
+        self.assertEqual(loaded_credentials.data['expires_in'], 10000)
         self.assertEqual(loaded_credentials.scopes, credentials.scopes)
 
     def test_loads_saved_credentials_nested_dir(self):
@@ -49,7 +49,7 @@ class CredentialsTest(unittest.TestCase):
 
         self.assertEqual(loaded_credentials.access_token, "test-access-token")
         self.assertEqual(loaded_credentials.refresh_token, "test-refresh-token")
-        self.assertEqual(loaded_credentials.expires_in, 10000)
+        self.assertEqual(loaded_credentials.data['expires_in'], 10000)
         self.assertEqual(loaded_credentials.scopes, credentials.scopes)
 
 if __name__ == '__main__':

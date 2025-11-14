@@ -45,17 +45,22 @@ class OAuth(ABC):
 
         def fetch_credentials(credentials: Optional[Credentials]):
             if credentials and credentials.is_expired() and credentials.is_refreshable():
+                logger.debug(f"Refreshing: {credentials}")
                 token_data = self._refresh_access_token(credentials.refresh_token)
                 if token_data:
-                    return Credentials(token_data).with_scopes(scopes)
+                    credentials = Credentials(token_data).with_scopes(scopes)
+                    logger.debug(f"Refreshed: {credentials}")
+                    return credentials
 
             token_data = self._exchange_auth_code_for_access_token(get_auth_code())
-            return Credentials(token_data).with_scopes(scopes)
+            credentials = Credentials(token_data).with_scopes(scopes)
+            logger.debug(f"Fetched: {credentials}")
+            return credentials
 
         if not credentials_file:
             return fetch_credentials(None)
 
-        return self.credentials_store.load_or_fetch(fetch_credentials, credentials_file, scopes)
+        return self.credentials_store.load_or_fetch(credentials_file, fetch_credentials, scopes)
 
     def prompt_user_to_authorize_app(self, auth_url: str, callback_handler, timeout: int = 30) -> str:
         oauth_flow = OAuthFlow()

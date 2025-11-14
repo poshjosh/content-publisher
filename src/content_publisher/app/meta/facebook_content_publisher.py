@@ -19,13 +19,13 @@ class FacebookContentPublisher(SocialContentPublisher):
         self.graph = None
 
     def authenticate(self, request: PostRequest):
-        permissions = request.post_config.get("credentials_scopes", [
+        permissions = request.get("credentials_scopes", [
             'pages_show_list',
             'pages_read_engagement',
             'pages_manage_posts',
             'pages_manage_engagement'
         ])
-        credentials_filename = request.post_config.get("credentials_filename", "facebook.pickle")
+        credentials_filename = request.get("credentials_filename", "facebook.pickle")
 
         oauth = FacebookOAuth(self.__api_endpoint, {**self.__credentials, **request.post_config})
 
@@ -51,7 +51,7 @@ class FacebookContentPublisher(SocialContentPublisher):
             content: Content = request.content
 
             if content.video_file:
-                # Post video
+                # Post video and text content
                 with open(content.video_file, 'rb') as video_file:
                     # facebook.GraphAPIError: (#100) The global id 100092339087423 is not allowed for this call
                     max_len = 50000 #63206

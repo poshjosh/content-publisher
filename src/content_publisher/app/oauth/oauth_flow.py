@@ -51,7 +51,7 @@ class OAuthFlow:
               f"\n\nPlease authorize this application by visiting the following URL:\n"
               f"\n{auth_url}\n{'='*70}\n")
         webbrowser.open(auth_url)
-        print("\n\nWaiting for authorization\n(This window will update once you authorize the app)\n")
+        print("\nWaiting for authorization\n(This window will update once you authorize the app)\n")
 
     def handle_request(self):
         self.server.handle_request()

@@ -9,10 +9,10 @@ cd "$WORKING_DIR" || (printf "\nCould not change to working dir: %s\n" "$WORKING
 printf "\nWorking from: %s\n" "$(pwd)"
 
 platforms="tiktok"
-orientation="landscape"
+orientation="portrait"
 dir="/Users/chinomso/Desktop/live-above-3D/content-publisher-sample-dir"
 title="Stand by your words, even when they fail"
-tags="#pray #faith #speak #conviction #victory #universe #believe"
+tags="#pray,#faith,#speak,#conviction,#victory,#universe,#believe"
 
 python3 main.py -v true -p "$platforms" -o "$orientation" -d "$dir" -t "$title" -tg "$tags"
 

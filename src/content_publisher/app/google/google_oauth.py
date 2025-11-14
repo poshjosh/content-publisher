@@ -26,20 +26,36 @@ class GoogleOAuth:
             raise ValueError("client_id and client_secret are required")
 
     def get_credentials_interactively(self, scopes: list[str], credentials_file: Optional[str] = None) -> Credentials:
+
+        def is_valid(credentials: Credentials) -> bool:
+            google_creds = self.credentials_from_dict(credentials.data)
+            return google_creds.valid
+
+        def refresh_credentials(credentials: Optional[Credentials]):
+            google_creds = self.credentials_from_dict(credentials.data)
+            logger.debug(f"Refreshing: {credentials}")
+            google_creds.refresh(Request())
+            token_data = self.credentials_to_dict(google_creds)
+            credentials = Credentials(token_data).with_scopes(scopes)
+            logger.debug(f"Refreshed: {credentials}")
+            return credentials
+
         def fetch_credentials(credentials: Optional[Credentials]):
-            if credentials and credentials.is_expired() and credentials.is_refreshable():
-                google_creds = self.credentials_from_dict(credentials.data)
-                google_creds.refresh(Request())
-                token_data = self.credentials_to_dict(google_creds)
-                return Credentials(token_data).with_scopes(scopes)
+            if credentials and credentials.is_expired() and credentials.is_refreshable() and is_valid(credentials):
+                try:
+                    return refresh_credentials(credentials)
+                except Exception as ex:
+                    logger.exception(f"Error refreshing: {credentials}", exc_info=ex)
 
             token_data = self._get_credentials_interactively(scopes)
-            return Credentials(token_data).with_scopes(scopes)
+            credentials = Credentials(token_data).with_scopes(scopes)
+            logger.debug(f"Fetched: {credentials}")
+            return credentials
 
         if not credentials_file:
             return fetch_credentials(None)
 
-        return self.credentials_store.load_or_fetch(fetch_credentials, credentials_file, scopes)
+        return self.credentials_store.load_or_fetch(credentials_file, fetch_credentials, scopes, is_valid)
 
     def _get_credentials_interactively(self, scopes: List[str]) -> Dict[str, Any]:
         try:

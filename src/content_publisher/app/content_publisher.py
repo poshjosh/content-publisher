@@ -51,10 +51,9 @@ class Content:
     subtitle_files: Optional[Dict[str, str]] = None  # {'en': 'path/to/en.srt', 'es': 'path/to/es.vtt'}
     metadata: Optional[Dict[str, Any]] = None
 
-    def get_metadata(self, key: str, default: Any = None) -> Any:
-        if self.metadata and key in self.metadata:
-            return self.metadata[key]
-        return default
+    def get_metadata(self, key: str, fallback: Any = None) -> Any:
+        val = self.metadata[key] if self.metadata and key in self.metadata else None
+        return fallback if val is None else val
 
     def __post_init__(self):
         """Validate content object after initialization"""
@@ -73,11 +72,12 @@ class Content:
 
     @staticmethod
     def of_dir(dir_path: str,
-               title: str,
-               content_orientation: str = "portrait",
+               accept_file: Callable[[str], bool] = lambda arg: True,
+               title: Optional[str] = None,
+               media_orientation: str = "portrait",
                language_code: str = "en",
                tags: Union[List[str], bool] = False,
-               accept_file: Callable[[str], bool] = lambda arg: True) -> 'Content':
+               metadata: Optional[Dict[str, Any]] = None) -> 'Content':
         if not dir_path:
             raise ValueError("Directory path is required")
         if not os.path.exists(dir_path) or not os.path.isdir(dir_path):
@@ -91,13 +91,13 @@ class Content:
             description = f.read()
             logger.debug(f"Description length {len(description)} chars")
 
-        video_file = os.path.join(dir_path,  f"video-{content_orientation}.mp4")
+        video_file = os.path.join(dir_path,  f"video-{media_orientation}.mp4")
         if not os.path.exists(video_file):
             video_file = os.path.join(dir_path, "video.mp4")
 
-        image_file = os.path.join(dir_path, f"cover-{content_orientation}.jpg")
+        image_file = os.path.join(dir_path, f"cover-{media_orientation}.jpg")
         if not os.path.exists(image_file):
-            image_file = os.path.join(dir_path, f"cover-{content_orientation}.jpeg")
+            image_file = os.path.join(dir_path, f"cover-{media_orientation}.jpeg")
             if not os.path.exists(image_file):
                 image_file = os.path.join(dir_path, "cover.jpg")
                 if not os.path.exists(image_file):
@@ -130,6 +130,11 @@ class Content:
             tags = Content.extract_hashtags_from_text(description, 500)
             logger.debug(f"Extracted tags from description: {tags}")
 
+        if media_orientation:
+            if not metadata:
+                metadata = {}
+            metadata['media_orientation'] = media_orientation
+
         return Content(
             description=description,
             video_file=video_file if os.path.exists(video_file) else None,
@@ -138,7 +143,7 @@ class Content:
             language_code=language_code,
             tags=tags,
             subtitle_files=subtitle_files,
-            metadata=None
+            metadata=metadata
         )
 
     @staticmethod
@@ -203,6 +208,14 @@ class PostRequest:
             raise ValueError("API credentials are required")
         if self.post_config is None:
             self.post_config = {}
+
+    def get(self, key: str, fallback: Any = None) -> Any:
+        return self.content.get_metadata(key, self._get_post_config(key, fallback))
+
+    def _get_post_config(self, key: str, fallback: Any = None) -> Any:
+        val = self.post_config[key] if self.post_config and key in self.post_config else None
+        return fallback if val is None else val
+
 
 @dataclass
 class PostResult:
@@ -345,6 +358,10 @@ class SocialMediaPoster:
             result.add_step(f"Authenticated with {platform}")
 
             logger.debug(f"Posting... \n{request.content}")
+            if request.get('dry_run', False) is True:
+                result.add_step("!!! Dry run enabled - skipping actual post !!!")
+                return result.as_success(f"SUCCESS - {platform} completed.")
+
             return publisher.post_content(request, result)
 
         except Exception as ex:

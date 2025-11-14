@@ -7,8 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.12] - 2025-11-14
+
 ### Added
 
+- Allow specifying of media_orientation as content metadata, use it to configure YouTube shorts.
+- Fix bug which occurs due to trying to fresh invalid oauth token.
+- Fix bug in processing of oauth credentials expiry.
+- Fix bug in handling of YouTube tags.
 - Allow users specify whether to add thumbnail or subtitles to YouTube video posts.
 
 ## [0.0.11] - 2025-11-03

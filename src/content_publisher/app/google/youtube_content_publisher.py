@@ -8,7 +8,9 @@ from googleapiclient.http import MediaFileUpload
 from google.oauth2.credentials import Credentials
 
 from ..content_publisher import SocialContentPublisher, PostType, Content, PostResult, PostRequest
+from ..media import Media
 from .google_oauth import GoogleOAuth
+
 
 logger = logging.getLogger(__name__)
 
@@ -31,12 +33,19 @@ class YouTubeContentPublisher(SocialContentPublisher):
             oauth = GoogleOAuth({**self.__credentials, **request.post_config})
             # We need permission 'youtube.force-ssl' to upload subtitles
             scopes = oauth.to_scopes(['youtube', 'youtube.force-ssl'])
-            credentials_filename = request.post_config.get("credentials_filename", "youtube.pickle")
-            token_data = oauth.get_credentials_interactively(scopes, credentials_filename).data
-            credentials = oauth.credentials_from_dict(token_data)
-            self.service = build(service_name, self.__version, credentials=credentials)
+            credentials_filename = request.get("credentials_filename", "youtube.pickle")
+            credentials = oauth.get_credentials_interactively(scopes, credentials_filename)
+            google_credentials = oauth.credentials_from_dict(credentials.data)
+            self.service = build(service_name, self.__version, credentials=google_credentials)
         else:
             raise ValueError(f"Credentials insufficient for youtube authentication: {self.__credentials.keys()}")
+
+    def validate_content(self, content: Content, result: Optional[PostResult] = None) -> PostResult:
+        if result is None:
+            result = PostResult()
+        if not content.video_file:
+            return result.as_failure("YouTube requires a video file")
+        return super().validate_content(content, result)
 
     def post_content(self, request: PostRequest, result: Optional[PostResult] = None) -> PostResult:
         """Post video content to YouTube"""
@@ -46,16 +55,13 @@ class YouTubeContentPublisher(SocialContentPublisher):
 
             content: Content = request.content
 
-            if content.tags:
-                if len(",".join([f'\"{e}\"' for e in content.tags if ' ' in e])) > 500:
-                    return result.as_failure("Total length of tags exceeds maximum of 500 chars.")
-
-            if not content.video_file:
-                return result.as_failure("YouTube requires a video file")
+            is_youtube_shorts = YouTubeContentPublisher.is_youtube_shorts(request)
+            YouTubeContentPublisher.update_tags(content, is_youtube_shorts)
 
             # https://developers.google.com/youtube/v3/docs/videos?hl=en#properties
             snippet = content.get_metadata('snippet', {
                 # Note: 22=People & Blogs, 26=Howto & Style, 29=Nonprofits & Activism, 42=Shorts
+                # Using 42, caused problems
                 'categoryId': 26,
                 'tags': content.tags if content.tags else ['trending'],
                 'defaultLanguage': content.language_code if content.language_code else 'en',
@@ -85,25 +91,26 @@ class YouTubeContentPublisher(SocialContentPublisher):
 
             result.add_step("Prepared video upload")
 
-            # Upload video
-            insert_request = self.service.videos().insert(
-                part=','.join(body.keys()),
-                body=body,
-                media_body=media
-            )
+            response = self.upload_video(media, body, result)
 
-            response = insert_request.execute()
+            if not result.success:
+                return result
+
             video_id = response['id']
 
             result.add_step(f"Video uploaded successfully - ID: {video_id}")
-            result.post_url = f"https://www.youtube.com/watch?v={video_id}"
+            if is_youtube_shorts:
+                result.post_url = f"https://www.youtube.com/shorts/{video_id}"
+            else:
+                result.post_url = f"https://www.youtube.com/watch?v={video_id}"
             result.platform_response = response
 
-            if content.image_file and request.post_config.get('add_thumbnail', True) is True:
+            if content.image_file and is_youtube_shorts is False and \
+                    request.get('add_thumbnail', True) is True:
                 self.add_thumbnail(content.image_file, video_id, result)
 
-            # Add subtitles if provided
-            if content.subtitle_files and request.post_config.get('add_subtitles', True) is True:
+            if content.subtitle_files and is_youtube_shorts is False and \
+                    request.get('add_subtitles', True) is True:
                 self.add_subtitles(content.subtitle_files, video_id, result)
 
             if not result.success:
@@ -113,6 +120,54 @@ class YouTubeContentPublisher(SocialContentPublisher):
 
         except Exception as ex:
             return result.as_failure_ex("Failed to post to YouTube", ex)
+
+    @staticmethod
+    def is_youtube_shorts(request: PostRequest) -> bool:
+        is_portrait = request.get('media_orientation', None) == 'portrait'
+        video_duration = Media.get_video_duration_seconds(request.content.video_file, 0.0)
+        return is_portrait and 0.0 < video_duration < (180 - 5)
+
+    @staticmethod
+    def update_tags(content: Content, is_youtube_shorts: bool):
+        shorts_tag = '#shorts'
+        if is_youtube_shorts:
+            if content.tags:
+                if len([e for e in content.tags if shorts_tag in e.lower()]) == 0:
+                    content.tags = [shorts_tag] + content.tags
+            else:
+                content.tags = [shorts_tag]
+
+        tag_text_max_len = 500
+        tag_text = ""
+        tags = []
+        for tag in content.tags:
+            tag_text += f'\"{tag}\",' if ' ' in tag else f'{tag},'
+            if len(tag_text) > tag_text_max_len:
+                break
+            tags.append(tag)
+
+        content.tags = tags
+
+    def upload_video(self, media: MediaFileUpload, body: Dict[str, Any], result: PostResult):
+        try:
+            insert_request = self.service.videos().insert(
+                part=','.join(body.keys()),
+                body=body,
+                media_body=media
+            )
+
+            response = insert_request.execute()
+            if response and 'id' in response:
+                result.add_step(f"Video uploaded successfully - ID: {response['id']}")
+            else:
+                result.add_step(f"Failed to upload video to youtube, media: {media}"
+                                f"\nResponse: {response}", logging.WARNING)
+            return response
+        except Exception as ex:
+            message = f"Failed to upload video to youtube, media: {media}"
+            logger.exception(message, exc_info=ex)
+            result.add_step(message, logging.WARNING)
+            return None
 
     def add_thumbnail(self, image_file: str, video_id: str, result: Optional[PostResult] = None) -> PostResult:
         """Add thumbnail to YouTube video"""
