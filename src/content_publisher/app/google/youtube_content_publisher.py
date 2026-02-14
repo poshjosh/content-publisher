@@ -97,8 +97,6 @@ class YouTubeContentPublisher(SocialContentPublisher):
                 return result
 
             video_id = response['id']
-
-            result.add_step(f"Video uploaded successfully - ID: {video_id}")
             if is_youtube_shorts:
                 result.post_url = f"https://www.youtube.com/shorts/{video_id}"
             else:
@@ -107,11 +105,15 @@ class YouTubeContentPublisher(SocialContentPublisher):
 
             if content.image_file and is_youtube_shorts is False and \
                     request.get('add_thumbnail', True) is True:
-                self.add_thumbnail(content.image_file, video_id, result)
+                result = self.add_thumbnail(content.image_file, video_id, result)
+
+            playlist = request.get('playlist')
+            if playlist:
+                result = self.add_to_playlist(playlist, video_id, result)
 
             if content.subtitle_files and is_youtube_shorts is False and \
                     request.get('add_subtitles', True) is True:
-                self.add_subtitles(content.subtitle_files, video_id, result)
+                result = self.add_subtitles(content.subtitle_files, video_id, result)
 
             if not result.success:
                 return result
@@ -191,6 +193,40 @@ class YouTubeContentPublisher(SocialContentPublisher):
             return result
         except Exception as ex:
             message = f"Failed to add thumbnail: {str(ex)}"
+            return result.as_failure(message)
+
+    def add_to_playlist(self, playlist_id: str, video_id: str, result: Optional[PostResult] = None) -> PostResult:
+        """Add YouTube video to playlist"""
+        if result is None:
+            result = PostResult()
+        try:
+            if not playlist_id:
+                message = f"Invalid playlist ID: {playlist_id}"
+                return result.add_step(message, logging.WARNING)
+
+            if not video_id:
+                message = f"Invalid video ID: {video_id}"
+                return result.add_step(message, logging.WARNING)
+
+            insert_request = self.service.playlistItems().insert(
+                part='snippet',
+                body={
+                    'snippet': {
+                        'playlistId': playlist_id,
+                        'resourceId': {
+                            'kind': 'youtube#video',
+                            'videoId': video_id
+                        }
+                    }
+                }
+            )
+
+            insert_request.execute()
+            result.add_step(f"Added video to playlist: {playlist_id}")
+
+            return result
+        except Exception as ex:
+            message = f"Failed to add video to playlist: {playlist_id}, {str(ex)}"
             return result.as_failure(message)
 
     def add_subtitles(self, subtitle_files: Dict[str, str], video_id: str, result: Optional[PostResult] = None) -> PostResult:
